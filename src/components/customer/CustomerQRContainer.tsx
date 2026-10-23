@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { QRResolution, MenuCategory, MenuItem } from '../../../docs/contracts/types';
+import { useRouter } from 'next/navigation';
+import { ChefHat, ChevronRight } from 'lucide-react';
+import type { QRResolution, MenuCategory, MenuItem, OrderDetail } from '../../../docs/contracts/types';
+import { ORDER_STATUS_LABELS } from '../../../docs/contracts/types';
 import { CustomerOrderModeHeader } from './CustomerOrderModeHeader';
 import { TableVerificationCard } from './TableVerificationCard';
 import { QRResolutionStateView, type QRResolutionUiState } from './QRResolutionStateView';
@@ -9,7 +12,7 @@ import { MenuPreviewSection } from './MenuPreviewSection';
 import { StickyCartPreview } from './StickyCartPreview';
 import { CustomerSkeleton } from './CustomerSkeleton';
 import { ItemDetailSheet, type SelectedItemPayload } from './ItemDetailSheet';
-import { usePresentationCart, CartSheet } from './cart';
+import { usePresentationCart, CartSheet, type ActiveOrderSummary } from './cart';
 import { createCartStore } from '../../features/cart';
 import { menuRequest, MenuApiError } from '../../features/customer/api-client';
 import {
@@ -87,6 +90,7 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
   demoState = null,
   className = '',
 }) => {
+  const router = useRouter();
   const isDev = process.env.NODE_ENV !== 'production';
   // Mock data is an explicit preview only, never a fallback for real API errors.
   const isDemo = isDev && !!demoState;
@@ -97,6 +101,35 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
+
+  // Lưu giữ thông tin đơn hàng vừa đặt để khách luôn theo dõi được tiến độ
+  const [activeOrder, setActiveOrder] = useState<ActiveOrderSummary | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = window.sessionStorage.getItem(`pv_order_${qrCode}`);
+      if (stored) return JSON.parse(stored) as ActiveOrderSummary;
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  const handleOrderConfirmed = (order: OrderDetail) => {
+    const summary: ActiveOrderSummary = {
+      id: order.id,
+      ticketNo: order.ticketNo ?? 0,
+      status: order.status,
+      itemCount: order.itemCount,
+      totalVnd: order.totalVnd,
+      tableLabel: resolution && resolution.type === 'table' ? resolution.table.label : undefined,
+    };
+    setActiveOrder(summary);
+    try {
+      window.sessionStorage.setItem(`pv_order_${qrCode}`, JSON.stringify(summary));
+    } catch {
+      // ignore
+    }
+  };
 
   // The store owns both R01 and R03. Rendering/subscribing never fetches again.
   const [cartSource] = useState(() => {
@@ -238,6 +271,12 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
           mode={resolution.mode}
           tableLabel={tableLabel}
           cartItemCount={cartState.totalQuantity}
+          activeOrderTicket={activeOrder?.ticketNo}
+          onTrackOrder={() => {
+            if (activeOrder) {
+              router.push(`/order/${encodeURIComponent(activeOrder.id)}?qrCode=${encodeURIComponent(qrCode)}`);
+            }
+          }}
           onOpenCart={() => setIsCartSheetOpen(true)}
         />
 
@@ -319,6 +358,47 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         )}
 
         {/* =================================================================
+            2c. Thẻ Theo Dõi Đơn Hàng Đang Chuẩn Bị (Active Order Tracking Card)
+           ================================================================= */}
+        {activeOrder && (
+          <div className="px-4 pt-3 pb-1">
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#E8F4F0] via-white to-[#E8F4F0] border border-[#35977D]/40 shadow-xs flex items-center justify-between gap-3 animate-dialog-card-in">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-[#1D725E] text-white flex items-center justify-center flex-shrink-0 shadow-xs relative">
+                  <ChefHat className="w-5 h-5" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] ring-2 ring-white absolute -top-0.5 -right-0.5 animate-pulse" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#1D2522]">
+                      Đơn #{String(activeOrder.ticketNo).padStart(3, '0')}
+                    </span>
+                    <span className="text-[10px] font-semibold text-[#1D725E] bg-white px-2 py-0.5 rounded-full border border-[#C6E7DC]">
+                      {ORDER_STATUS_LABELS[activeOrder.status as keyof typeof ORDER_STATUS_LABELS] || 'Đang chuẩn bị'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#55605C] truncate mt-0.5">
+                    {activeOrder.tableLabel ? `${activeOrder.tableLabel} · ` : ''}
+                    {activeOrder.itemCount} phần món · Chạm để xem tiến độ làm món
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  router.push(`/order/${encodeURIComponent(activeOrder.id)}?qrCode=${encodeURIComponent(qrCode)}`);
+                }}
+                className="px-3 h-9 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] active:scale-95 text-white text-xs font-bold flex items-center gap-1 shadow-xs transition-all flex-shrink-0"
+              >
+                <span>Xem đơn</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================
             3. Vỏ Khung Xem Trước Thực Đơn (Menu Customer Shell P2-G02)
            ================================================================= */}
         <div className="pt-2">
@@ -372,8 +452,16 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         readiness={readiness}
         isTakeaway={isTakeaway}
         tableLabel={tableLabel || 'Bàn'}
+        storeName={resolution.store.name}
+        qrCode={qrCode}
         isTableVerified={isTableVerified}
         menuItems={menuItems}
+        isDemo={isDemo}
+        onOrderConfirmed={handleOrderConfirmed}
+        activeOrder={activeOrder}
+        onTrackOrder={(orderId) => {
+          router.push(`/order/${encodeURIComponent(orderId)}?qrCode=${encodeURIComponent(qrCode)}`);
+        }}
         onGoToVerifyTable={() => {
           const input = document.querySelector<HTMLInputElement>('input[name="sessionCode"]');
           if (input) {

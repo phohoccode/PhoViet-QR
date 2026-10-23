@@ -61,6 +61,17 @@ export const AddEditTableDialog: React.FC<AddEditTableDialogProps> = ({
     setRequestId(crypto.randomUUID());
   }
 
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleAnimatedClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 180);
+  };
+
   if (!isOpen) return null;
 
   const validateInput = (): boolean => {
@@ -146,16 +157,26 @@ export const AddEditTableDialog: React.FC<AddEditTableDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="table-dialog-title"
+      onClick={handleAnimatedClose}
     >
-      <div className="w-full sm:max-w-md bg-white rounded-t-[28px] sm:rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+      <div
+        className={`w-full sm:max-w-md bg-white rounded-t-[28px] sm:rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${
+          isClosing
+            ? 'animate-sheet-slide-down sm:animate-dialog-card-out'
+            : 'animate-sheet-slide-up sm:animate-dialog-card-in'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-[#E9ECEA] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#E8F4F0] text-[#1D725E] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-[#E8F4F0] text-[#1D725E] flex items-center justify-center shrink-0">
               {mode === 'create' ? (
                 <Plus className="w-5 h-5" aria-hidden="true" />
               ) : (
@@ -178,7 +199,7 @@ export const AddEditTableDialog: React.FC<AddEditTableDialogProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             className="p-2 rounded-xl text-[#727B77] hover:bg-[#F7F8F7] hover:text-[#1D2522] transition-colors"
             aria-label="Đóng hộp thoại"
           >
@@ -208,7 +229,7 @@ export const AddEditTableDialog: React.FC<AddEditTableDialogProps> = ({
                   onClose();
                   onViewQr?.(successResult.table);
                 }}
-                className="flex-1 h-11 px-4 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
+                className="flex-1 min-h-11 px-4 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
               >
                 <QrCode className="w-4 h-4" aria-hidden="true" />
                 <span>Xem mã QR</span>
@@ -271,7 +292,7 @@ export const AddEditTableDialog: React.FC<AddEditTableDialogProps> = ({
             <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#E9ECEA]">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleAnimatedClose}
                 disabled={isSubmitting}
                 className="h-10 px-4 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-xs font-semibold text-[#1D2522] transition-colors"
               >

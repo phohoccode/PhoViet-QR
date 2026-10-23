@@ -38,6 +38,16 @@ export const TableSessionOpenedDialog: React.FC<TableSessionOpenedDialogProps> =
 }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedQrLink, setCopiedQrLink] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleAnimatedClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 180);
+  };
 
   const sessionCode = openedView.sessionCredential.sessionCode;
   const qrUrl = qrCode
@@ -75,12 +85,20 @@ export const TableSessionOpenedDialog: React.FC<TableSessionOpenedDialogProps> =
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="opened-dialog-title"
+      onClick={handleAnimatedClose}
     >
-      <div className="w-full max-w-md bg-white rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
+      <div
+        className={`w-full max-w-md bg-white rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col ${
+          isClosing ? 'animate-dialog-card-out' : 'animate-dialog-card-in'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header thành công */}
         <div className="p-5 sm:p-6 bg-[#E8F4F0] border-b border-[#C6E7DC] flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -96,7 +114,7 @@ export const TableSessionOpenedDialog: React.FC<TableSessionOpenedDialogProps> =
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             className="p-1.5 rounded-xl text-[#1D725E] hover:bg-[#C6E7DC]/50 transition-colors"
             aria-label="Đóng hộp thoại"
           >
@@ -111,7 +129,7 @@ export const TableSessionOpenedDialog: React.FC<TableSessionOpenedDialogProps> =
             <span className="text-[11px] font-bold text-[#1D725E] uppercase tracking-wider block mb-1">
               Mã xác nhận phiên bàn (Session Code)
             </span>
-            <div className="text-3xl sm:text-4xl font-mono font-bold text-[#1D2522] tracking-widest my-2 select-all">
+            <div className="text-3xl sm:text-4xl font-mono wrap-break-word font-bold text-[#1D2522] tracking-widest my-2 select-all">
               {sessionCode}
             </div>
             <p className="text-xs text-[#727B77] mb-3">
@@ -222,6 +240,16 @@ export const TableDetailDialog: React.FC<TableDetailDialogProps> = ({
   onClose,
 }) => {
   const session = table.session;
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleAnimatedClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 180);
+  };
 
   const openedAtDate = session ? new Date(session.openedAt) : null;
   const formattedOpenedAt =
@@ -231,12 +259,20 @@ export const TableDetailDialog: React.FC<TableDetailDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="table-detail-title"
+      onClick={handleAnimatedClose}
     >
-      <div className="w-full max-w-md bg-white rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
+      <div
+        className={`w-full max-w-md bg-white rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col ${
+          isClosing ? 'animate-dialog-card-out' : 'animate-dialog-card-in'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-5 bg-white border-b border-[#E9ECEA] flex items-center justify-between">
           <div>
@@ -247,7 +283,7 @@ export const TableDetailDialog: React.FC<TableDetailDialogProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             className="p-1.5 rounded-xl text-[#727B77] hover:bg-[#F7F8F7] transition-colors"
             aria-label="Đóng"
           >
@@ -334,7 +370,7 @@ export const TableDetailDialog: React.FC<TableDetailDialogProps> = ({
         <div className="p-4 bg-[#F7F8F7] border-t border-[#E9ECEA] flex justify-end">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             className="h-10 px-5 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-xs font-semibold text-[#1D2522] transition-colors"
           >
             Đóng

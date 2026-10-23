@@ -1,5 +1,6 @@
 import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput, OpenTableSessionInput, OwnerSessionOpenedView } from "@contracts";
 import { menuRequest } from "@/features/customer/api-client";
+import type { OwnerOrdersQuery, OwnerOrdersView, RequestCommand, OrderDetail, OrderTransitionInput, CompleteOrderInput } from "@contracts";
 import type { OwnerTableList, OwnerTable, OwnerQrCode, CreateTableInput, UpdateTableInput, WriteQrInput, RotateQrInput } from "@/types/contracts/table-qr";
 export { MenuApiError } from "@/features/customer/api-client";
 export const fetchOwnerMenu = (includeInactive = true): Promise<OwnerMenuView> => menuRequest(`/api/owner/menu?includeInactive=${includeInactive}`);
@@ -15,3 +16,11 @@ export const fetchOwnerQrCodes = (): Promise<OwnerQrCode[]> => menuRequest("/api
 export const writeOwnerQrCode = (input: WriteQrInput): Promise<OwnerQrCode> => menuRequest("/api/owner/qr-codes", "POST", input);
 export const rotateOwnerQrCode = (id: string, input: RotateQrInput): Promise<OwnerQrCode> => menuRequest(`/api/owner/qr-codes/${encodeURIComponent(id)}/rotate`, "POST", input);
 export const openOwnerTableSession = (tableId: string, input: OpenTableSessionInput): Promise<OwnerSessionOpenedView> => menuRequest(`/api/owner/tables/${encodeURIComponent(tableId)}/sessions`, "POST", input);
+export function getOwnerOrders(query: OwnerOrdersQuery = {}): Promise<OwnerOrdersView> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) if (value !== undefined) params.set(key, String(value));
+  return menuRequest(`/api/owner/orders${params.size ? `?${params}` : ""}`);
+}
+export const claimNextOrder = (input: RequestCommand): Promise<OrderDetail | null> => menuRequest("/api/owner/queue/claim-next", "POST", input);
+export const markOrderReady = (id: string, input: OrderTransitionInput): Promise<OrderDetail> => menuRequest(`/api/owner/orders/${encodeURIComponent(id)}/ready`, "POST", input);
+export const completeOrder = (id: string, input: CompleteOrderInput): Promise<OrderDetail> => menuRequest(`/api/owner/orders/${encodeURIComponent(id)}/complete`, "POST", input);

@@ -11,6 +11,8 @@ interface CustomerOrderModeHeaderProps {
   tableLabel?: string | null;
   cartItemCount?: number;
   onOpenCart?: () => void;
+  activeOrderTicket?: number | null;
+  onTrackOrder?: () => void;
   className?: string;
 }
 
@@ -28,6 +30,8 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
   tableLabel,
   cartItemCount = 0,
   onOpenCart,
+  activeOrderTicket,
+  onTrackOrder,
   className = '',
 }) => {
   const isDineIn = mode === 'dine_in';
@@ -37,7 +41,7 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
 
   return (
     <header
-      className={`sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#E9ECEA] px-4 py-3 flex items-center justify-between gap-3 ${className}`}
+      className={`sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#E9ECEA] px-4 py-3 flex items-center justify-between gap-2 sm:gap-3 ${className}`}
     >
       {/* 1. Logo quán & Tên quán & Badge loại đơn */}
       <div className="flex items-center gap-2.5 min-w-0">
@@ -55,20 +59,34 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
         </div>
       </div>
 
-      {/* 2. Nút giỏ hàng nhỏ trên header (Touch target 44x44px) */}
-      <button
-        type="button"
-        onClick={onOpenCart}
-        className="relative w-11 h-11 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] flex items-center justify-center text-[#1D2522] hover:bg-[#E8F4F0] active:scale-95 transition-all flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
-        aria-label={`Mở giỏ hàng xem trước, hiện có ${cartItemCount} món`}
-      >
-        <ShoppingBag className="w-5 h-5 text-[#1D2522]" aria-hidden="true" />
-        {cartItemCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#1D725E] text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
-            {cartItemCount}
-          </span>
-        )}
-      </button>
+      {/* 2. Cụm nút hành động bên phải: Đơn đang xử lý & Nút giỏ hàng */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {activeOrderTicket ? (
+          <button
+            type="button"
+            onClick={onTrackOrder}
+            className="h-10 px-2.5 rounded-xl bg-[#E8F4F0] border border-[#35977D]/30 text-[#1D725E] hover:bg-[#1D725E] hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs active:scale-95"
+            aria-label={`Theo dõi đơn hàng số #${String(activeOrderTicket).padStart(3, '0')}`}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+            <span>#{String(activeOrderTicket).padStart(3, '0')}</span>
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          onClick={onOpenCart}
+          className="relative w-11 h-11 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] flex items-center justify-center text-[#1D2522] hover:bg-[#E8F4F0] active:scale-95 transition-all flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+          aria-label={`Mở giỏ hàng xem trước, hiện có ${cartItemCount} món`}
+        >
+          <ShoppingBag className="w-5 h-5 text-[#1D2522]" aria-hidden="true" />
+          {cartItemCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#1D725E] text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-xs">
+              {cartItemCount}
+            </span>
+          )}
+        </button>
+      </div>
     </header>
   );
 };

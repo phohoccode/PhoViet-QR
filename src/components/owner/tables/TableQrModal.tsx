@@ -60,6 +60,16 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [justRotated, setJustRotated] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleAnimatedClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 180);
+  };
 
   // Idempotent Request ID cho thao tác rotate (UI-02)
   const rotateRequestIdRef = useRef<string | null>(null);
@@ -221,12 +231,20 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
 
       {/* DIALOG CHÍNH TRÊN MÀN HÌNH */}
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200 print:hidden"
+        className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs print:hidden ${
+          isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="qr-dialog-title"
+        onClick={handleAnimatedClose}
       >
-        <div className="w-full max-w-md bg-white rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]">
+        <div
+          className={`w-full max-w-md bg-white rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] ${
+            isClosing ? 'animate-dialog-card-out' : 'animate-dialog-card-in'
+          }`}
+          onClick={(e) => e.stopPropagation()}
+        >
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-[#E9ECEA] flex items-center justify-between">
             <div>
@@ -253,7 +271,7 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleAnimatedClose}
               className="p-2 rounded-xl text-[#727B77] hover:bg-[#F7F8F7] hover:text-[#1D2522] transition-colors"
               aria-label="Đóng hộp thoại"
             >

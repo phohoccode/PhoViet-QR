@@ -8,7 +8,7 @@
  * của một món đã nằm trong giỏ mà không cần phải xóa đi chọn lại.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Check, Plus, Minus } from 'lucide-react';
 import type { MenuItem } from '../../../../docs/contracts/types';
 import type { CustomerCartItem } from './types';
@@ -40,6 +40,19 @@ export const EditCartItemDialog: React.FC<EditCartItemDialogProps> = ({
   const [note, setNote] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
 
+  const [isClosing, setIsClosing] = useState<boolean>(false);
+
+  const handleAnimatedClose = useCallback(() => {
+    setIsClosing((prev) => {
+      if (prev) return prev;
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 180);
+      return true;
+    });
+  }, [onClose]);
+
   // Điền dữ liệu ban đầu khi mở dialog theo mẫu chuẩn React
   const [prevLineId, setPrevLineId] = useState<string | null>(null);
   if (item && isOpen && item.lineId !== prevLineId) {
@@ -55,12 +68,12 @@ export const EditCartItemDialog: React.FC<EditCartItemDialogProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose();
+        handleAnimatedClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleAnimatedClose]);
 
   if (!isOpen || !item) return null;
 
@@ -92,7 +105,7 @@ export const EditCartItemDialog: React.FC<EditCartItemDialogProps> = ({
       note: note.trim() || undefined,
       quantity,
     });
-    onClose();
+    handleAnimatedClose();
   };
 
   const currentSelectedOptions = availableOptions
@@ -111,12 +124,20 @@ export const EditCartItemDialog: React.FC<EditCartItemDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+      className={`fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="edit-cart-item-title"
+      onClick={handleAnimatedClose}
     >
-      <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-xl border border-[#E9ECEA] flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+      <div
+        className={`bg-white rounded-3xl max-w-sm w-full p-5 shadow-xl border border-[#E9ECEA] flex flex-col max-h-[85vh] ${
+          isClosing ? 'animate-dialog-card-out' : 'animate-dialog-card-in'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[#E9ECEA]">
           <div>
@@ -128,7 +149,7 @@ export const EditCartItemDialog: React.FC<EditCartItemDialogProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             className="w-8 h-8 rounded-full bg-[#F7F8F7] hover:bg-[#E9ECEA] flex items-center justify-center text-[#727B77]"
             aria-label="Đóng"
           >

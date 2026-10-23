@@ -71,3 +71,121 @@ body {
     z-index: 999999;
   }
 }
+
+/* ==========================================================================
+   Micro-Animations for Modals, Dialogs, Sheets & Drawers
+   - Hiệu ứng mượt mà 60fps chuẩn Minimal Emerald UI
+   ========================================================================== */
+@keyframes dialogFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialogFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes dialogScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes dialogScaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+}
+
+@keyframes sheetSlideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheetSlideDown {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes drawerSlideRightIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawerSlideRightOut {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* Explicit Animation Classes */
+.animate-dialog-backdrop-in {
+  animation: dialogFadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-dialog-backdrop-out {
+  animation: dialogFadeOut 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-dialog-card-in {
+  animation: dialogScaleIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-dialog-card-out {
+  animation: dialogScaleOut 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-sheet-slide-up {
+  animation: sheetSlideUp 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-sheet-slide-down {
+  animation: sheetSlideDown 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.animate-drawer-in {
+  animation: drawerSlideRightIn 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-drawer-out {
+  animation: drawerSlideRightOut 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Tailwind v3 compatibility fallbacks in Tailwind v4 */
+.fade-in {
+  animation: dialogFadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.zoom-in-95 {
+  animation: dialogScaleIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.slide-in-from-bottom {
+  animation: sheetSlideUp 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

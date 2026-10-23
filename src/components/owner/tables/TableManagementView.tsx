@@ -211,7 +211,7 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-[#727B77] mt-0.5">
-            Quản lý nhãn bàn, xem và tải mã QR công khai (/q/[code]), mở phiên phục vụ khách.
+            Quản lý nhãn bàn, xem và tải mã QR công khai, mở phiên phục vụ khách.
           </p>
         </div>
 

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Play } from 'lucide-react';
 import type {
   OrderDetail,
   TableSummary,
@@ -10,15 +9,10 @@ import type {
 import type { OwnerTable, OwnerQrCode } from '@/types/contracts/table-qr';
 import { OwnerHeader } from './OwnerHeader';
 import { type OwnerTabType } from './OwnerHeaderPills';
-import { OrderCardPreview } from './OrderCardPreview';
-import { OrderDetailPreview } from './OrderDetailPreview';
-import { OrderDetailSheet } from './OrderDetailSheet';
-import { OwnerEmptyState } from './OwnerEmptyState';
-import { OwnerErrorState } from './OwnerErrorState';
-import { OrdersQueueSkeleton } from './OwnerTabSkeletons';
 import { OwnerMenuView } from './menu/OwnerMenuView';
 import { TableManagementView } from './tables/TableManagementView';
 import { TakeawayQrCard } from './settings/TakeawayQrCard';
+import { OwnerOrdersView } from './orders/OwnerOrdersView';
 
 export type OwnerTabState = 'ready' | 'loading' | 'empty' | 'error';
 
@@ -72,22 +66,13 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
   roleLabel,
   isLoggingOut = false,
   logoutError = null,
-  ordersState = 'ready',
   tablesState = 'ready',
-  onRetryOrders,
   onRetryTables,
-  onClaimNext,
   onLogout,
   logoutAction,
   className = '',
 }) => {
   const [activeTab, setActiveTab] = useState<OwnerTabType>(initialTab);
-  const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(
-    orders[0] || null
-  );
-  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState<boolean>(false);
-  const [orderFilter, setOrderFilter] = useState<'all' | 'dine_in' | 'takeaway'>('all');
-  const [isClaiming, setIsClaiming] = useState<boolean>(false);
 
   // =========================================================================
   // KẾT NỐI API THỰC TẾ CHO TAB BÀN (R11 GET /api/owner/tables & R17 GET /api/owner/qr-codes)
@@ -255,32 +240,6 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
     };
   }, [activeTab, tables]);
 
-  // Lọc đơn hàng theo loại
-  const filteredOrders = orders.filter((o) => {
-    if (orderFilter === 'all') return true;
-    return o.type === orderFilter;
-  });
-
-  // Đếm nhanh trạng thái đơn
-  const waitingCount = orders.filter((o) => o.status === 'accepted').length;
-  const preparingCount = orders.filter((o) => o.status === 'preparing').length;
-  const readyCount = orders.filter((o) => o.status === 'ready').length;
-
-  // Giả lập tương tác nhận đơn FIFO (Preview Interaction)
-  const handleClaimNextClick = () => {
-    setIsClaiming(true);
-    setTimeout(() => {
-      setIsClaiming(false);
-      onClaimNext?.();
-    }, 400);
-  };
-
-  // Khi chọn một đơn hàng (hỗ trợ mobile Sheet và desktop right panel)
-  const handleSelectOrder = (order: OrderDetail) => {
-    setSelectedOrder(order);
-    setIsMobileSheetOpen(true);
-  };
-
   return (
     <div className={`min-h-screen bg-[#F5F6F5] p-2 sm:p-4 md:p-6 text-[#1D2522] ${className}`}>
       {/* =====================================================================
@@ -303,180 +262,13 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
         {/* 2. Nội dung 4 Tab */}
         <main className="flex-1 p-3 sm:p-4 md:p-6 bg-white overflow-hidden flex flex-col">
           {/* =================================================================
-              TAB 1: ĐƠN HÀNG (Default - Bố cục 70/30 trên Desktop)
+              TAB 1: ĐƠN HÀNG (Bố cục 70/30 Desktop, 1 cột Mobile/Tablet FIFO P3-G02)
              ================================================================= */}
           {activeTab === 'orders' && (
-            <div className="flex-1 flex flex-col lg:flex-row gap-6 h-full">
-              {/* CỘT TRÁI: Hàng đợi đơn hàng (~70% trên desktop, 100% trên mobile/tablet) */}
-              <section className="flex-1 lg:w-[68%] flex flex-col gap-4">
-                {/* Thanh điều khiển: Bộ lọc & KPI */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[#E9ECEA]">
-                  <div className="flex items-center gap-1.5 p-1 bg-[#F7F8F7] rounded-xl border border-[#E9ECEA] text-xs font-semibold">
-                    <button
-                      type="button"
-                      onClick={() => setOrderFilter('all')}
-                      className={`px-3 py-1.5 rounded-lg transition-colors ${
-                        orderFilter === 'all'
-                          ? 'bg-white text-[#1D2522] shadow-sm'
-                          : 'text-[#727B77] hover:text-[#1D2522]'
-                      }`}
-                    >
-                      Tất cả ({orders.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOrderFilter('dine_in')}
-                      className={`px-3 py-1.5 rounded-lg transition-colors ${
-                        orderFilter === 'dine_in'
-                          ? 'bg-white text-[#1D2522] shadow-sm'
-                          : 'text-[#727B77] hover:text-[#1D2522]'
-                      }`}
-                    >
-                      Tại bàn
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOrderFilter('takeaway')}
-                      className={`px-3 py-1.5 rounded-lg transition-colors ${
-                        orderFilter === 'takeaway'
-                          ? 'bg-white text-[#1D2522] shadow-sm'
-                          : 'text-[#727B77] hover:text-[#1D2522]'
-                      }`}
-                    >
-                      Mang đi
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs font-medium text-[#727B77]">
-                    <span className="px-2.5 py-1 rounded-lg bg-[#F1F3F2] text-[#55605C]">
-                      Chờ: <strong>{waitingCount}</strong>
-                    </span>
-                    <span className="px-2.5 py-1 rounded-lg bg-[#EBF3FB] text-[#1D528A]">
-                      Đang làm: <strong>{preparingCount}</strong>
-                    </span>
-                    <span className="px-2.5 py-1 rounded-lg bg-[#E8F4F0] text-[#165B4B]">
-                      Sẵn sàng: <strong>{readyCount}</strong>
-                    </span>
-                  </div>
-                </div>
-
-                {/* NÚT FIFO DUY NHẤT: Bắt đầu đơn tiếp theo theo đúng thứ tự */}
-                <div className="bg-[#FAFBFB] p-3 rounded-2xl border border-[#E9ECEA] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="text-xs">
-                    <p className="font-bold text-[#1D2522]">Quy trình chế biến công bằng (FIFO)</p>
-                    <p className="text-[#727B77]">
-                      Hệ thống tự động tiếp nhận đơn cũ nhất đang chờ làm.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={waitingCount === 0 || isClaiming}
-                    onClick={handleClaimNextClick}
-                    className={`w-full sm:w-auto h-11 px-5 rounded-xl text-xs md:text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
-                      waitingCount > 0
-                        ? 'bg-[#1D725E] hover:bg-[#165B4B] text-white active:scale-95'
-                        : 'bg-[#F1F3F2] text-[#A0A8A5] cursor-not-allowed'
-                    }`}
-                  >
-                    <Play className="w-4 h-4 fill-current" aria-hidden="true" />
-                    <span>
-                      {isClaiming
-                        ? 'Đang nhận đơn...'
-                        : waitingCount > 0
-                        ? `Nhận đơn tiếp theo (${waitingCount})`
-                        : 'Không có đơn chờ làm'}
-                    </span>
-                  </button>
-                </div>
-
-                {/* Xử lý các trạng thái của Tab Đơn hàng */}
-                {ordersState === 'loading' && <OrdersQueueSkeleton />}
-
-                {ordersState === 'error' && (
-                  <OwnerErrorState
-                    title="Không thể tải danh sách đơn hàng"
-                    description="Có lỗi khi đồng bộ đơn từ hệ thống máy chủ."
-                    onRetry={onRetryOrders}
-                  />
-                )}
-
-                {ordersState === 'ready' && (
-                  <div className="flex-1 overflow-y-auto pr-1">
-                    {filteredOrders.length === 0 ? (
-                      <OwnerEmptyState
-                        title="Chưa có đơn hàng trong ca"
-                        description="Hàng đợi đơn hàng thời gian thực và điều phối chế biến (FIFO) sẽ được kích hoạt ở Phase 3 khi kết nối API đặt món. Đơn gọi món từ khách quét QR sẽ tự động hiển thị tại đây."
-                      />
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {filteredOrders.map((order) => (
-                          <OrderCardPreview
-                            key={order.id}
-                            order={order}
-                            isSelected={selectedOrder?.id === order.id}
-                            onSelect={() => handleSelectOrder(order)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </section>
-
-              {/* CỘT PHẢI: Khung chi tiết đơn hàng (~32% trên Desktop, ẩn trên mobile/tablet) */}
-              <aside className="hidden lg:flex lg:w-[32%] flex-col min-h-[420px]">
-                <OrderDetailPreview
-                  order={selectedOrder}
-                  onMarkReady={(id) => {
-                    if (selectedOrder && selectedOrder.id === id) {
-                      setSelectedOrder({
-                        ...selectedOrder,
-                        status: 'ready',
-                        statusLabel: 'Sẵn sàng',
-                        fulfillmentStatus: 'ready',
-                      } as OrderDetail);
-                    }
-                  }}
-                  onComplete={(id) => {
-                    if (selectedOrder && selectedOrder.id === id) {
-                      setSelectedOrder({
-                        ...selectedOrder,
-                        status: 'completed',
-                        statusLabel: 'Đã giao',
-                        fulfillmentStatus: selectedOrder.type === 'dine_in' ? 'served' : 'collected',
-                      } as OrderDetail);
-                    }
-                  }}
-                />
-              </aside>
-
-              {/* Sheet / Dialog chi tiết đơn cho Mobile & Tablet (< lg) */}
-              <OrderDetailSheet
-                order={selectedOrder}
-                isOpen={isMobileSheetOpen}
-                onClose={() => setIsMobileSheetOpen(false)}
-                onMarkReady={(id) => {
-                  if (selectedOrder && selectedOrder.id === id) {
-                    setSelectedOrder({
-                      ...selectedOrder,
-                      status: 'ready',
-                      statusLabel: 'Sẵn sàng',
-                      fulfillmentStatus: 'ready',
-                    } as OrderDetail);
-                  }
-                }}
-                onComplete={(id) => {
-                  if (selectedOrder && selectedOrder.id === id) {
-                    setSelectedOrder({
-                      ...selectedOrder,
-                      status: 'completed',
-                      statusLabel: 'Đã giao',
-                      fulfillmentStatus: selectedOrder.type === 'dine_in' ? 'served' : 'collected',
-                    } as OrderDetail);
-                  }
-                }}
-              />
-            </div>
+            <OwnerOrdersView
+              initialOrders={orders}
+              storeName={storeName}
+            />
           )}
 
           {/* =================================================================

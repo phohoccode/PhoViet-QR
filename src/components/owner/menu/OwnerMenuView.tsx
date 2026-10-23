@@ -10,7 +10,6 @@ import {
   FolderPlus,
   RefreshCw,
   AlertCircle,
-  Sparkles,
   Coffee,
   CheckCircle2,
   Loader2,
@@ -45,23 +44,28 @@ function removeVietnameseDiacritics(str: string): string {
 }
 
 /**
- * Skeleton nạp danh sách món
+ * Skeleton nạp danh sách món dạng grid
  */
 const OwnerMenuSkeleton: React.FC = () => (
-  <div className="space-y-3 animate-pulse">
-    {[1, 2, 3, 4].map((i) => (
+  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 animate-pulse">
+    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
       <div
         key={i}
-        className="p-4 bg-white rounded-2xl border border-[#E9ECEA] flex items-center justify-between gap-4"
+        className="bg-white rounded-2xl border border-[#E9ECEA] overflow-hidden flex flex-col"
       >
-        <div className="flex items-center gap-3 flex-1">
-          <div className="w-14 h-14 rounded-xl bg-[#F7F8F7] flex-shrink-0" />
-          <div className="space-y-2 flex-1">
-            <div className="w-1/3 h-4 bg-[#E9ECEA] rounded" />
-            <div className="w-1/4 h-3 bg-[#F7F8F7] rounded" />
+        <div className="h-36 sm:h-40 bg-[#F7F8F7] w-full" />
+        <div className="p-4 space-y-2.5 flex-1 flex flex-col justify-between">
+          <div className="space-y-2">
+            <div className="w-2/3 h-4 bg-[#E9ECEA] rounded" />
+            <div className="w-full h-3 bg-[#F7F8F7] rounded" />
+            <div className="w-1/2 h-3 bg-[#F7F8F7] rounded" />
+            <div className="w-1/3 h-5 bg-[#E9ECEA] rounded mt-2" />
+          </div>
+          <div className="pt-2.5 border-t border-[#F2F4F2] flex items-center justify-between">
+            <div className="w-20 h-8 bg-[#F7F8F7] rounded-xl" />
+            <div className="w-16 h-8 bg-[#F7F8F7] rounded-xl" />
           </div>
         </div>
-        <div className="w-24 h-8 bg-[#F7F8F7] rounded-xl flex-shrink-0" />
       </div>
     ))}
   </div>
@@ -90,9 +94,8 @@ export const OwnerMenuView: React.FC = () => {
 
   // Editor states
   const [selectedItemForEdit, setSelectedItemForEdit] = useState<OwnerMenuItem | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState<boolean>(false); // Modal trên mobile
+  const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState<boolean>(false);
-  const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
 
   // Quick toggle mutating state & Idempotent request IDs (UI-02)
   const [mutatingItemId, setMutatingItemId] = useState<string | null>(null);
@@ -295,14 +298,12 @@ export const OwnerMenuView: React.FC = () => {
 
   // Mở form thêm món mới
   const handleOpenCreate = () => {
-    setIsCreatingNew(true);
     setSelectedItemForEdit(null);
     setIsFormOpen(true);
   };
 
   // Mở form chỉnh sửa món
   const handleOpenEdit = (item: OwnerMenuItem) => {
-    setIsCreatingNew(false);
     setSelectedItemForEdit(item);
     setIsFormOpen(true);
   };
@@ -317,8 +318,8 @@ export const OwnerMenuView: React.FC = () => {
       return [savedItem, ...prev];
     });
 
-    setSelectedItemForEdit(savedItem);
-    setIsCreatingNew(false);
+    setSelectedItemForEdit(null);
+    setIsFormOpen(false);
     setNotification({
       type: 'success',
       message: `Đã lưu món "${savedItem.name}" thành công!`,
@@ -504,34 +505,33 @@ export const OwnerMenuView: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Bố cục chính: Split 65/35 trên Desktop lg+, 1 cột trên Mobile/Tablet */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Cột trái (65-70% trên desktop, toàn bộ trên mobile): Danh sách món */}
-        <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-3">
-          {isLoading && <OwnerMenuSkeleton />}
+      {/* 3. Bố cục chính: Danh sách món dạng Grid đáp ứng */}
+      <div className="flex-1 flex flex-col gap-4">
+        {isLoading && <OwnerMenuSkeleton />}
 
-          {errorMessage && (
-            <div className="p-8 text-center bg-[#FEF3F2] rounded-2xl border border-[#FECDCA]">
-              <AlertCircle className="w-8 h-8 text-[#B42318] mx-auto mb-2" aria-hidden="true" />
-              <p className="text-sm font-bold text-[#912018]">{errorMessage}</p>
-              <button
-                type="button"
-                onClick={loadMenu}
-                className="mt-3 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#B42318] text-white hover:bg-[#912018] inline-flex items-center gap-1.5"
-              >
-                <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Thử tải lại</span>
-              </button>
-            </div>
-          )}
+        {errorMessage && (
+          <div className="p-8 text-center bg-[#FEF3F2] rounded-2xl border border-[#FECDCA]">
+            <AlertCircle className="w-8 h-8 text-[#B42318] mx-auto mb-2" aria-hidden="true" />
+            <p className="text-sm font-bold text-[#912018]">{errorMessage}</p>
+            <button
+              type="button"
+              onClick={loadMenu}
+              className="mt-3 px-3 py-1.5 rounded-xl text-xs font-bold bg-[#B42318] text-white hover:bg-[#912018] inline-flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Thử tải lại</span>
+            </button>
+          </div>
+        )}
 
-          {!isLoading && !errorMessage && filteredItems.length === 0 && (
-            <div className="p-10 text-center bg-white rounded-2xl border border-[#E9ECEA]">
-              <Coffee className="w-8 h-8 text-[#A0A8A5] mx-auto mb-2" aria-hidden="true" />
-              <p className="text-sm font-bold text-[#1D2522]">Không tìm thấy món ăn phù hợp</p>
-              <p className="text-xs text-[#727B77] mt-1 max-w-sm mx-auto">
-                Không có món nào khớp với danh mục hoặc từ khóa lọc hiện tại.
-              </p>
+        {!isLoading && !errorMessage && filteredItems.length === 0 && (
+          <div className="p-10 text-center bg-white rounded-2xl border border-[#E9ECEA]">
+            <Coffee className="w-8 h-8 text-[#A0A8A5] mx-auto mb-2" aria-hidden="true" />
+            <p className="text-sm font-bold text-[#1D2522]">Không tìm thấy món ăn phù hợp</p>
+            <p className="text-xs text-[#727B77] mt-1 max-w-sm mx-auto">
+              Không có món nào khớp với danh mục hoặc từ khóa lọc hiện tại.
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={() => {
@@ -539,78 +539,94 @@ export const OwnerMenuView: React.FC = () => {
                   setSelectedCategoryId('all');
                   setStatusFilter('all');
                 }}
-                className="mt-3 text-xs font-bold text-[#1D725E] hover:underline"
+                className="px-3 py-1.5 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-xs font-semibold text-[#55605C] transition-colors"
               >
                 Xóa tất cả bộ lọc
               </button>
+              <button
+                type="button"
+                onClick={handleOpenCreate}
+                className="px-3.5 py-1.5 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Thêm món mới</span>
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {!isLoading && !errorMessage && filteredItems.length > 0 && (
-            <div className="flex flex-col gap-2.5">
-              {filteredItems.map((item) => {
-                const isSelected = selectedItemForEdit?.id === item.id;
-                const isItemMutating = mutatingItemId === item.id;
-                const categoryName =
-                  categories.find((c) => c.id === item.categoryId)?.name || 'Chung';
+        {!isLoading && !errorMessage && filteredItems.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+            {filteredItems.map((item) => {
+              const isItemMutating = mutatingItemId === item.id;
+              const categoryName =
+                categories.find((c) => c.id === item.categoryId)?.name || 'Chung';
 
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => handleOpenEdit(item)}
-                    className={`p-3.5 bg-white rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 shadow-2xs hover:shadow-xs ${
-                      isSelected
-                        ? 'border-[#1D725E] ring-1 ring-[#1D725E] bg-[#FAFDFB]'
-                        : 'border-[#E9ECEA] hover:border-[#C6E7DC]'
-                    }`}
-                  >
-                    {/* Ảnh và thông tin món */}
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="relative w-12 h-12 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] overflow-hidden flex items-center justify-center flex-shrink-0">
-                        {item.imageUrl ? (
-                          <Image
-                            src={item.imageUrl}
-                            alt={item.name}
-                            width={48}
-                            height={48}
-                            className="object-cover w-full h-full"
-                            unoptimized
-                          />
-                        ) : (
-                          <Coffee className="w-5 h-5 text-[#35977D]" aria-hidden="true" />
-                        )}
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => handleOpenEdit(item)}
+                  className="group bg-white rounded-2xl border border-[#E9ECEA] hover:border-[#35977D] hover:shadow-md transition-all duration-200 overflow-hidden flex flex-col cursor-pointer relative"
+                >
+                  {/* Ảnh món ăn & Badges */}
+                  <div className="relative w-full h-36 sm:h-40 bg-[#F7F8F7] overflow-hidden flex items-center justify-center flex-shrink-0">
+                    {item.imageUrl ? (
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.name}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-[#A0A8A5] gap-1">
+                        <Coffee className="w-8 h-8 text-[#35977D]/60" aria-hidden="true" />
+                        <span className="text-[10px] font-medium text-[#727B77]">Chưa có ảnh</span>
                       </div>
+                    )}
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="text-xs sm:text-sm font-bold text-[#1D2522] truncate">
-                            {item.name}
-                          </h4>
-                          {!item.active && (
-                            <span className="text-[10px] font-semibold text-[#55605C] bg-[#F1F3F2] px-1.5 py-0.2 rounded">
-                              Đã ẩn
-                            </span>
-                          )}
-                        </div>
+                    {/* Huy hiệu danh mục & Trạng thái ẩn/hiện */}
+                    <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/95 backdrop-blur-xs text-[#55605C] border border-[#E9ECEA] shadow-2xs">
+                        {categoryName}
+                      </span>
+                      {!item.active && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#1D2522]/85 text-white shadow-2xs">
+                          Đã ẩn
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-xs font-bold text-[#1D725E]">
-                            {new Intl.NumberFormat('vi-VN').format(item.priceVnd)} đ
+                  {/* Thông tin món ăn */}
+                  <div className="p-3.5 sm:p-4 flex flex-col flex-1 justify-between gap-3">
+                    <div>
+                      <h4
+                        className="text-sm sm:text-base font-bold text-[#1D2522] group-hover:text-[#1D725E] transition-colors line-clamp-1"
+                        title={item.name}
+                      >
+                        {item.name}
+                      </h4>
+
+                      <p className="text-xs text-[#727B77] line-clamp-2 mt-1 min-h-[32px]">
+                        {item.description || 'Chưa có mô tả cho món này.'}
+                      </p>
+
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="text-sm sm:text-base font-bold text-[#1D725E]">
+                          {new Intl.NumberFormat('vi-VN').format(item.priceVnd)} đ
+                        </span>
+                        {item.options && item.options.length > 0 && (
+                          <span className="text-[10px] text-[#727B77] bg-[#F7F8F7] px-1.5 py-0.5 rounded border border-[#E9ECEA]">
+                            +{item.options.length} tùy chọn
                           </span>
-                          <span className="text-[10px] text-[#727B77] bg-[#F7F8F7] px-1.5 py-0.5 rounded">
-                            {categoryName}
-                          </span>
-                          {item.options && item.options.length > 0 && (
-                            <span className="text-[10px] text-[#727B77]">
-                              +{item.options.length} tùy chọn
-                            </span>
-                          )}
-                        </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Bộ điều khiển nhanh: Toggle còn hàng & Nút sửa */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Bộ điều khiển nhanh: Toggle còn hàng & Nút chỉnh sửa */}
+                    <div className="pt-2.5 border-t border-[#F2F4F2] flex items-center justify-between gap-2">
                       {/* Nút toggle tình trạng còn hàng */}
                       <button
                         type="button"
@@ -618,8 +634,8 @@ export const OwnerMenuView: React.FC = () => {
                         onClick={(e) => handleToggleAvailable(item, e)}
                         className={`h-8 px-2.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
                           item.available
-                            ? 'bg-[#E8F4F0] text-[#1D725E] border-[#C6E7DC] hover:bg-[#C6E7DC]'
-                            : 'bg-[#FEF3F2] text-[#912018] border-[#FECDCA] hover:bg-[#FECDCA]'
+                            ? 'bg-[#E8F4F0] text-[#1D725E] border-[#C6E7DC] hover:bg-[#D5EFE7]'
+                            : 'bg-[#FEF3F2] text-[#912018] border-[#FECDCA] hover:bg-[#FEE4E2]'
                         }`}
                         title="Bấm để đổi nhanh tình trạng còn / hết hàng"
                         aria-label={`Đổi tình trạng ${item.name}`}
@@ -643,72 +659,36 @@ export const OwnerMenuView: React.FC = () => {
                           e.stopPropagation();
                           handleOpenEdit(item);
                         }}
-                        className="w-8 h-8 rounded-xl bg-[#F7F8F7] hover:bg-[#E9ECEA] text-[#55605C] flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+                        className="h-8 px-2.5 rounded-xl bg-[#F7F8F7] hover:bg-[#E8F4F0] hover:text-[#1D725E] text-[#55605C] border border-[#E9ECEA] hover:border-[#C6E7DC] flex items-center gap-1 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
                         aria-label={`Chỉnh sửa ${item.name}`}
                       >
                         <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Sửa</span>
                       </button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Cột phải (30-35% trên desktop lg+): Side Panel biên tập món */}
-        <div className="hidden lg:block lg:col-span-5 xl:col-span-4 sticky top-4">
-          {selectedItemForEdit || isCreatingNew ? (
-            <OwnerMenuItemForm
-              item={selectedItemForEdit}
-              categories={categories}
-              isOpen={true}
-              isSidePanel={true}
-              onClose={() => {
-                setSelectedItemForEdit(null);
-                setIsCreatingNew(false);
-              }}
-              onSaved={handleItemSaved}
-            />
-          ) : (
-            <div className="h-[480px] bg-white rounded-2xl border border-dashed border-[#E9ECEA] p-6 flex flex-col items-center justify-center text-center">
-              <div className="w-12 h-12 rounded-2xl bg-[#E8F4F0] text-[#1D725E] flex items-center justify-center mb-3">
-                <Sparkles className="w-6 h-6" aria-hidden="true" />
-              </div>
-              <h4 className="text-sm font-bold text-[#1D2522]">Khu vực biên tập món</h4>
-              <p className="text-xs text-[#727B77] mt-1 max-w-[220px]">
-                Chọn một món từ danh sách bên trái để chỉnh sửa thông tin, hoặc bấm nút bên dưới.
-              </p>
-              <button
-                type="button"
-                onClick={handleOpenCreate}
-                className="mt-4 h-9 px-4 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Thêm món mới</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Modal chỉnh sửa cho màn hình Mobile / Tablet (< lg) */}
-      <div className="lg:hidden">
-        {isFormOpen && (
-          <OwnerMenuItemForm
-            item={selectedItemForEdit}
-            categories={categories}
-            isOpen={isFormOpen}
-            isSidePanel={false}
-            onClose={() => {
-              setIsFormOpen(false);
-              setSelectedItemForEdit(null);
-              setIsCreatingNew(false);
-            }}
-            onSaved={handleItemSaved}
-          />
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
+
+      {/* Dialog Thêm / Chỉnh sửa món ăn (Dùng chung cho toàn bộ thiết bị) */}
+      {isFormOpen && (
+        <OwnerMenuItemForm
+          key={selectedItemForEdit ? selectedItemForEdit.id : 'create-new'}
+          item={selectedItemForEdit}
+          categories={categories}
+          isOpen={isFormOpen}
+          isSidePanel={false}
+          onClose={() => {
+            setIsFormOpen(false);
+            setSelectedItemForEdit(null);
+          }}
+          onSaved={handleItemSaved}
+        />
+      )}
 
       {/* Dialog Thêm danh mục */}
       <OwnerCategoryDialog

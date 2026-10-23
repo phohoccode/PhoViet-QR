@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import {
   X,
@@ -65,15 +65,27 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
 }) => {
   const isEditing = Boolean(item);
 
-  // Form states
-  const [name, setName] = useState<string>('');
-  const [categoryId, setCategoryId] = useState<string>('');
-  const [priceDisplay, setPriceDisplay] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
-  const [imageUrl, setImageUrl] = useState<string>('');
-  const [isAvailable, setIsAvailable] = useState<boolean>(true);
-  const [isActive, setIsActive] = useState<boolean>(true);
-  const [options, setOptions] = useState<MenuOptionWrite[]>([]);
+  // Form states - khởi tạo trực tiếp từ item được truyền vào
+  const [name, setName] = useState<string>(() => item?.name || '');
+  const [categoryId, setCategoryId] = useState<string>(
+    () => item?.categoryId || (categories[0]?.id ?? '')
+  );
+  const [priceDisplay, setPriceDisplay] = useState<string>(
+    () => (item ? formatNumberInput(item.priceVnd) : '')
+  );
+  const [description, setDescription] = useState<string>(() => item?.description || '');
+  const [imageUrl, setImageUrl] = useState<string>(() => item?.imageUrl || '');
+  const [isAvailable, setIsAvailable] = useState<boolean>(() => item?.available ?? true);
+  const [isActive, setIsActive] = useState<boolean>(() => item?.active ?? true);
+  const [options, setOptions] = useState<MenuOptionWrite[]>(
+    () =>
+      item?.options?.map((opt) => ({
+        id: opt.id,
+        name: opt.name,
+        priceDeltaVnd: opt.priceDeltaVnd,
+        available: opt.available,
+      })) || []
+  );
 
   // Validation & Mutation states
   const pendingRequestIdRef = useRef<string | null>(null);
@@ -82,8 +94,9 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Điền dữ liệu khi đổi món được chọn theo mẫu chuẩn React
+  // Điền dữ liệu khi item được chọn thay đổi
   const [prevItem, setPrevItem] = useState<OwnerMenuItem | null>(item);
+
   if (item !== prevItem) {
     setPrevItem(item);
     if (item) {
@@ -117,10 +130,33 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
     setSuccessMessage(null);
   }
 
-  // Reset requestId khi item thay đổi
+  const [isClosing, setIsClosing] = useState<boolean>(false);
+
+  // Đóng dialog với animation thoát nhẹ nhàng
+  const handleAnimatedClose = useCallback(() => {
+    if (isSubmitting) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose?.();
+      setIsClosing(false);
+    }, 180);
+  }, [isSubmitting, onClose]);
+
+  // Reset requestId khi item thay đổi hoặc dialog đóng
   useEffect(() => {
     pendingRequestIdRef.current = null;
-  }, [item]);
+  }, [item, isOpen]);
+
+  // Đóng dialog khi bấm ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !isSubmitting && onClose) {
+        handleAnimatedClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isSubmitting, onClose, handleAnimatedClose]);
 
   if (!isOpen && !isSidePanel) return null;
 
@@ -211,7 +247,7 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
       ...(opt.id ? { id: opt.id } : {}),
       name: opt.name.trim(),
       priceDeltaVnd: Number(opt.priceDeltaVnd) || 0,
-      available: opt.available,
+      available: opt.available !== false,
     }));
 
     // Giữ nguyên command requestId qua retry / timeout
@@ -266,8 +302,8 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
       if (!isSidePanel && onClose) {
         setTimeout(() => {
           setIsSubmitting(false);
-          onClose();
-        }, 600);
+          handleAnimatedClose();
+        }, 500);
       } else {
         setIsSubmitting(false);
       }
@@ -331,16 +367,16 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
 
       if (!isSidePanel && onClose) {
         setTimeout(() => {
-          onClose();
-        }, 800);
+          handleAnimatedClose();
+        }, 500);
       }
     }
   };
 
   const formContent = (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full">
+    <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Header khu vực soạn thảo */}
-      <div className="px-5 py-3.5 border-b border-[#E9ECEA] flex items-center justify-between bg-white flex-shrink-0">
+      <div className="px-5 py-3.5 border-b border-[#E9ECEA] flex items-center justify-between bg-white flex-shrink-0 z-10">
         <div>
           <h3 className="text-sm font-bold text-[#1D2522]">
             {isEditing ? `Sửa món: ${item?.name}` : 'Thêm món mới vào thực đơn'}
@@ -353,9 +389,9 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
         {onClose && (
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             disabled={isSubmitting}
-            className="w-8 h-8 rounded-lg hover:bg-[#F7F8F7] text-[#727B77] flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+            className="w-8 h-8 rounded-lg hover:bg-[#F7F8F7] active:scale-95 text-[#727B77] flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
             aria-label="Đóng bảng chỉnh sửa"
           >
             <X className="w-4 h-4" aria-hidden="true" />
@@ -364,7 +400,7 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
       </div>
 
       {/* Nội dung Form cuộn được */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-thin">
+      <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4 overscroll-contain scrollbar-thin">
         {serverError && (
           <div
             className="p-3 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] text-xs text-[#912018] flex items-start gap-2"
@@ -656,6 +692,21 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
                     </span>
                   </div>
 
+                  {/* Toggle Còn / Hết hàng cho tùy chọn */}
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => handleOptionChange(idx, 'available', opt.available === false)}
+                    className={`h-8 px-2 rounded-lg text-[10px] font-semibold border flex items-center gap-1 transition-colors flex-shrink-0 ${
+                      opt.available !== false
+                        ? 'bg-[#E8F4F0] border-[#35977D]/30 text-[#1D725E]'
+                        : 'bg-[#FEF3F2] border-[#FECDCA] text-[#B42318]'
+                    }`}
+                    title={opt.available !== false ? 'Đang phục vụ (Bấm để tạm ngưng)' : 'Đang tạm ngưng (Bấm để phục vụ)'}
+                  >
+                    <span>{opt.available !== false ? 'Còn' : 'Hết'}</span>
+                  </button>
+
                   {/* Xóa tùy chọn */}
                   <button
                     type="button"
@@ -673,14 +724,14 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
         </div>
       </div>
 
-      {/* Footer Form: Nút Lưu & Hủy */}
-      <div className="p-4 bg-white border-t border-[#E9ECEA] flex items-center justify-end gap-2 flex-shrink-0">
+      {/* Footer Form: Nút Lưu & Hủy - Luôn cố định ở chân dialog */}
+      <div className="p-4 bg-white border-t border-[#E9ECEA] flex items-center justify-end gap-2 flex-shrink-0 z-10">
         {onClose && (
           <button
             type="button"
             disabled={isSubmitting}
-            onClick={onClose}
-            className="h-10 px-4 rounded-xl border border-[#E9ECEA] text-xs font-semibold text-[#55605C] hover:bg-[#F7F8F7] transition-colors"
+            onClick={handleAnimatedClose}
+            className="h-10 px-4 rounded-xl border border-[#E9ECEA] text-xs font-semibold text-[#55605C] hover:bg-[#F7F8F7] active:scale-95 transition-all"
           >
             Hủy
           </button>
@@ -715,21 +766,25 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
     );
   }
 
-  // Nếu là Dialog/Modal nổi (trên mobile/tablet)
+  // Nếu là Dialog/Modal nổi (trên mobile/tablet/desktop)
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      }`}
       role="dialog"
       aria-modal="true"
     >
       <div
         className="fixed inset-0 -z-10"
-        onClick={() => !isSubmitting && onClose?.()}
+        onClick={handleAnimatedClose}
         aria-hidden="true"
       />
 
       <div
-        className={`w-full max-w-lg max-h-[92vh] bg-white rounded-2xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 ${className}`}
+        className={`w-full max-w-2xl max-h-[88vh] bg-white rounded-2xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col ${
+          isClosing ? 'animate-dialog-card-out' : 'animate-dialog-card-in'
+        } ${className}`}
       >
         {formContent}
       </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useId, useEffect, useRef } from 'react';
+import React, { useState, useId, useEffect, useRef, useCallback } from 'react';
 import { X, FolderPlus, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import type { OwnerMenuCategory } from '../../../../docs/contracts/types';
 import { createCategory, MenuApiError } from '../../../features/owner/api-client';
@@ -55,16 +55,27 @@ export const OwnerCategoryDialog: React.FC<OwnerCategoryDialogProps> = ({
     }
   }, [isOpen]);
 
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleAnimatedClose = useCallback(() => {
+    if (isClosing || isSubmitting) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      onClose();
+      setIsClosing(false);
+    }, 180);
+  }, [isClosing, isSubmitting, onClose]);
+
   // Đóng khi nhấn Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen && !isSubmitting) {
-        onClose();
+        handleAnimatedClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isSubmitting, onClose]);
+  }, [isOpen, isSubmitting, handleAnimatedClose]);
 
   if (!isOpen) return null;
 
@@ -147,18 +158,24 @@ export const OwnerCategoryDialog: React.FC<OwnerCategoryDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
     >
       <div
         className="fixed inset-0 -z-10"
-        onClick={() => !isSubmitting && onClose()}
+        onClick={() => !isSubmitting && handleAnimatedClose()}
         aria-hidden="true"
       />
 
-      <div className="w-full max-w-md bg-white rounded-2xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+      <div
+        className={`w-full max-w-md bg-white rounded-2xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col ${
+          isClosing ? 'animate-dialog-card-out' : 'animate-dialog-card-in'
+        }`}
+      >
         {/* Header Dialog */}
         <div className="px-5 py-4 border-b border-[#E9ECEA] flex items-center justify-between bg-white">
           <div className="flex items-center gap-2">
@@ -176,7 +193,7 @@ export const OwnerCategoryDialog: React.FC<OwnerCategoryDialogProps> = ({
           <button
             type="button"
             disabled={isSubmitting}
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             className="w-8 h-8 rounded-lg hover:bg-[#F7F8F7] text-[#727B77] flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
             aria-label="Đóng hộp thoại"
           >

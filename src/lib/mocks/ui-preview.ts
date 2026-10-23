@@ -35,10 +35,11 @@ export const MOCK_TABLE_05: TableRef = {
 
 export const MOCK_CATEGORIES: MenuCategory[] = [
   { id: 'cat-all', name: 'Tất cả', sortOrder: 0 },
-  { id: 'cat-coffee', name: 'Cà phê', sortOrder: 1 },
-  { id: 'cat-tea', name: 'Trà trái cây', sortOrder: 2 },
-  { id: 'cat-milktea', name: 'Trà sữa', sortOrder: 3 },
-  { id: 'cat-bakery', name: 'Bánh ngọt', sortOrder: 4 },
+  { id: 'cat-pho', name: 'Phở & Món chính', sortOrder: 1 },
+  { id: 'cat-coffee', name: 'Cà phê', sortOrder: 2 },
+  { id: 'cat-tea', name: 'Trà trái cây', sortOrder: 3 },
+  { id: 'cat-milktea', name: 'Trà sữa', sortOrder: 4 },
+  { id: 'cat-bakery', name: 'Bánh ngọt', sortOrder: 5 },
 ];
 
 export const MOCK_MENU_ITEMS: MenuItem[] = [
@@ -53,6 +54,22 @@ export const MOCK_MENU_ITEMS: MenuItem[] = [
     options: [
       { id: 'opt-01', name: 'Ít ngọt (50%)', priceDeltaVnd: 0, available: true },
       { id: 'opt-02', name: 'Thêm kem muối', priceDeltaVnd: 8000, available: true },
+    ],
+    updatedAt: '2026-10-23T07:00:00Z',
+  },
+  {
+    id: 'item-pho-01',
+    categoryId: 'cat-pho',
+    name: 'Phở',
+    description: 'Phở truyền thống nước dùng ninh xương 12 tiếng, thơm gừng nướng và thảo mộc.',
+    priceVnd: 30000,
+    imageUrl: null,
+    available: true,
+    options: [
+      { id: 'opt-pho-01', name: 'Tái', priceDeltaVnd: 0, available: true },
+      { id: 'opt-pho-02', name: 'Nạm', priceDeltaVnd: 0, available: true },
+      { id: 'opt-pho-03', name: 'Viên', priceDeltaVnd: 0, available: true },
+      { id: 'opt-pho-04', name: 'Trứng Trần', priceDeltaVnd: 5000, available: true },
     ],
     updatedAt: '2026-10-23T07:00:00Z',
   },

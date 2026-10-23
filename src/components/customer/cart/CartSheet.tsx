@@ -14,7 +14,7 @@
  * - Không tạo order, không thanh toán giả, không tạo mã đơn hay số FIFO.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   ShoppingBag,
@@ -28,6 +28,16 @@ import type { CustomerCartState, CustomerCartActions, CartReadiness, CustomerCar
 import { CartLineItem } from './CartLineItem';
 import { PreCheckoutReview } from './PreCheckoutReview';
 import { EditCartItemDialog } from './EditCartItemDialog';
+import type { OrderDetail } from '../../../../docs/contracts/types';
+
+export interface ActiveOrderSummary {
+  id: string;
+  ticketNo: number;
+  status: string;
+  itemCount: number;
+  totalVnd: number;
+  tableLabel?: string;
+}
 
 interface CartSheetProps {
   isOpen: boolean;
@@ -37,10 +47,16 @@ interface CartSheetProps {
   readiness: CartReadiness;
   isTakeaway?: boolean;
   tableLabel?: string;
+  storeName?: string;
+  qrCode?: string;
   isTableVerified?: boolean;
   menuItems?: MenuItem[];
   onGoToVerifyTable?: () => void;
+  isDemo?: boolean;
   className?: string;
+  onOrderConfirmed?: (order: OrderDetail) => void;
+  activeOrder?: ActiveOrderSummary | null;
+  onTrackOrder?: (orderId: string) => void;
 }
 
 export const CartSheet: React.FC<CartSheetProps> = ({
@@ -51,10 +67,16 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   readiness,
   isTakeaway = false,
   tableLabel = 'Bàn',
+  storeName,
+  qrCode,
   isTableVerified = false,
   menuItems = [],
   onGoToVerifyTable,
+  isDemo = false,
   className = '',
+  onOrderConfirmed,
+  activeOrder,
+  onTrackOrder,
 }) => {
   // Trạng thái bước: 'cart' (xem danh sách món) | 'review' (xem lại trước đặt món)
   const [currentStep, setCurrentStep] = useState<'cart' | 'review'>('cart');
@@ -63,6 +85,18 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   // State làm mới trước khi xem lại
   const [isRefreshingReview, setIsRefreshingReview] = useState<boolean>(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+  const [isClosing, setIsClosing] = useState<boolean>(false);
+
+  const handleAnimatedClose = useCallback(() => {
+    setIsClosing((prev) => {
+      if (prev) return prev;
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 200);
+      return true;
+    });
+  }, [onClose]);
 
   // Reset về bước cart khi sheet được mở lại
   const [prevIsOpen, setPrevIsOpen] = useState<boolean>(isOpen);
@@ -79,12 +113,12 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen && !editingItem) {
-        onClose();
+        handleAnimatedClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, editingItem, onClose]);
+  }, [isOpen, editingItem, handleAnimatedClose]);
 
   // Xử lý mở màn hình xem lại trước khi đặt món (luôn refresh R01 + R03 mới nhất)
   const handleOpenReview = async () => {
@@ -123,14 +157,21 @@ export const CartSheet: React.FC<CartSheetProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex sm:justify-end items-end sm:items-stretch animate-in fade-in duration-200 ${className}`}
+      className={`fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex sm:justify-end items-end sm:items-stretch ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      } ${className}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="cart-sheet-title"
+      onClick={handleAnimatedClose}
     >
       {/* Khung nội dung: Mobile Bottom Sheet (bo góc trên) hoặc Desktop Slide-over Panel */}
       <div
-        className="w-full sm:max-w-md h-[90vh] sm:h-full bg-[#F5F6F5] rounded-t-3xl sm:rounded-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-[#E9ECEA] flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-right duration-300 pointer-events-auto"
+        className={`w-full sm:max-w-md h-[90vh] sm:h-full bg-[#F5F6F5] rounded-t-3xl sm:rounded-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-[#E9ECEA] flex flex-col overflow-hidden pointer-events-auto ${
+          isClosing
+            ? 'animate-sheet-slide-down sm:animate-drawer-out'
+            : 'animate-sheet-slide-up sm:animate-drawer-in'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         {currentStep === 'review' ? (
@@ -143,14 +184,19 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             totalQuantity={totalQuantity}
             isTakeaway={isTakeaway}
             tableLabel={tableLabel}
+            storeName={storeName}
+            qrCode={qrCode}
             isTableVerified={isTableVerified}
             readiness={readiness}
             cartActions={cartActions}
             onBackToCart={() => setCurrentStep('cart')}
+            onCloseSheet={handleAnimatedClose}
+            onOrderConfirmed={onOrderConfirmed}
             onGoToVerifyTable={() => {
-              onClose();
+              handleAnimatedClose();
               onGoToVerifyTable?.();
             }}
+            isDemo={isDemo}
           />
         ) : (
           /* ===================================================================
@@ -191,7 +237,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               {/* Nút đóng (X) đạt touch target >= 44px */}
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleAnimatedClose}
                 className="w-11 h-11 rounded-xl bg-[#F7F8F7] hover:bg-[#E9ECEA] text-[#55605C] flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
                 aria-label="Đóng giỏ hàng"
               >
@@ -239,7 +285,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      onClose();
+                      handleAnimatedClose();
                       onGoToVerifyTable();
                     }}
                     className="text-xs font-bold text-[#8A4D00] underline hover:text-[#6C3C00]"
@@ -265,9 +311,37 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                     Bạn chưa chọn món nào vào giỏ. Hãy xem thực đơn và chọn những món bạn yêu thích
                     nhé!
                   </p>
+
+                  {/* Thẻ theo dõi đơn hàng đang phục vụ nếu có */}
+                  {activeOrder && (
+                    <div className="mt-4 p-3.5 bg-white border border-[#C6E7DC] rounded-2xl text-left w-full max-w-xs shadow-xs">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-[#1D2522]">
+                          Đơn #{String(activeOrder.ticketNo).padStart(3, '0')}
+                        </span>
+                        <span className="text-[10px] font-semibold text-[#1D725E] bg-[#E8F4F0] px-2 py-0.5 rounded-full border border-[#C6E7DC]">
+                          Đang chuẩn bị
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#55605C]">
+                        {activeOrder.itemCount} phần món đã gửi tới bếp
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleAnimatedClose();
+                          onTrackOrder?.(activeOrder.id);
+                        }}
+                        className="mt-2.5 w-full h-9 rounded-xl bg-[#1D725E] text-white text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-[#165B4B] transition-colors"
+                      >
+                        <span>Xem tiến độ đơn này →</span>
+                      </button>
+                    </div>
+                  )}
+
                   <button
                     type="button"
-                    onClick={onClose}
+                    onClick={handleAnimatedClose}
                     className="mt-5 h-11 px-5 rounded-xl text-xs font-bold bg-[#1D725E] hover:bg-[#165B4B] text-white transition-colors shadow-xs"
                   >
                     Chọn món ngay

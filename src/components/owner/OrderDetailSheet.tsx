@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Clock, MapPin, ShoppingBag, Bell, PackageCheck, AlertCircle } from 'lucide-react';
 import type { OrderDetail } from '../../../docs/contracts/types';
 import { OwnerStatusBadge } from './OwnerStatusBadge';
@@ -25,19 +25,32 @@ export const OrderDetailSheet: React.FC<OrderDetailSheetProps> = ({
   onMarkReady,
   onComplete,
 }) => {
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleAnimatedClose = useCallback(() => {
+    setIsClosing((prev) => {
+      if (prev) return prev;
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 180);
+      return true;
+    });
+  }, [onClose]);
+
   // Lắng nghe phím Escape để đóng Sheet
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        handleAnimatedClose();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleAnimatedClose]);
 
   if (!isOpen || !order) return null;
 
@@ -46,13 +59,23 @@ export const OrderDetailSheet: React.FC<OrderDetailSheetProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs transition-opacity lg:hidden"
+      className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-xs lg:hidden ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="sheet-order-title"
+      onClick={handleAnimatedClose}
     >
       {/* Container của Sheet */}
-      <div className="w-full sm:max-w-lg bg-white rounded-t-[24px] sm:rounded-2xl border border-[#E9ECEA] shadow-2xl max-h-[85vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200">
+      <div
+        className={`w-full sm:max-w-lg bg-white rounded-t-[24px] sm:rounded-2xl border border-[#E9ECEA] shadow-2xl max-h-[85vh] flex flex-col overflow-hidden ${
+          isClosing
+            ? 'animate-sheet-slide-down sm:animate-dialog-card-out'
+            : 'animate-sheet-slide-up sm:animate-dialog-card-in'
+        }`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header Sheet */}
         <div className="p-4 border-b border-[#E9ECEA] bg-[#FAFBFB] flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -76,7 +99,7 @@ export const OrderDetailSheet: React.FC<OrderDetailSheetProps> = ({
           {/* Nút đóng */}
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             className="w-9 h-9 rounded-xl text-[#727B77] hover:text-[#1D2522] hover:bg-[#E9ECEA] flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#35977D]"
             aria-label="Đóng bảng chi tiết đơn"
           >

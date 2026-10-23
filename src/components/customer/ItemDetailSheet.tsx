@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useId, useCallback } from 'react';
 import Image from 'next/image';
 import {
   X,
@@ -62,6 +62,18 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
   const [note, setNote] = useState<string>('');
   const [isAddedFeedback, setIsAddedFeedback] = useState<boolean>(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [isClosing, setIsClosing] = useState<boolean>(false);
+
+  const handleAnimatedClose = useCallback(() => {
+    setIsClosing((prev) => {
+      if (prev) return prev;
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 200);
+      return true;
+    });
+  }, [onClose]);
 
   // Reset state khi đổi món theo mẫu chuẩn React mà không dùng setState trong effect
   if (item && item.id !== prevItemId) {
@@ -77,23 +89,26 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
-        onClose();
+        handleAnimatedClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleAnimatedClose]);
 
   if (!isOpen || !item) {
     return null;
   }
 
-  // Tùy chọn chỉ lấy từ contract
-  const availableOptions: MenuOption[] = item.options || [];
+  // Tùy chọn chỉ lấy từ contract (bảo đảm mọi option có available !== false đều được tính là còn hàng)
+  const availableOptions: MenuOption[] = (item.options || []).map((opt) => ({
+    ...opt,
+    available: opt.available !== false,
+  }));
 
   // Toggle chọn / bỏ chọn một option
   const handleToggleOption = (option: MenuOption) => {
-    if (!option.available) return;
+    if (option.available === false) return;
     setSelectedOptionIds((prev) => {
       const next = new Set(prev);
       if (next.has(option.id)) {
@@ -136,13 +151,15 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
     setIsAddedFeedback(true);
     setTimeout(() => {
       setIsAddedFeedback(false);
-      onClose();
-    }, 400);
+      handleAnimatedClose();
+    }, 350);
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-200"
+      className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 ${
+        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -151,13 +168,17 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
       {/* Backdrop click to close */}
       <div
         className="fixed inset-0 -z-10"
-        onClick={onClose}
+        onClick={handleAnimatedClose}
         aria-hidden="true"
       />
 
       {/* Sheet Container: Bottom sheet trên mobile, Dialog giữa màn hình trên tablet/desktop */}
       <div
-        className={`w-full sm:max-w-md max-h-[90vh] bg-white rounded-t-[28px] sm:rounded-3xl border-t sm:border border-[#E9ECEA] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-250 ${className}`}
+        className={`w-full sm:max-w-md max-h-[90vh] bg-white rounded-t-[28px] sm:rounded-3xl border-t sm:border border-[#E9ECEA] shadow-2xl flex flex-col overflow-hidden ${
+          isClosing
+            ? 'animate-sheet-slide-down sm:animate-dialog-card-out'
+            : 'animate-sheet-slide-up sm:animate-dialog-card-in'
+        } ${className}`}
       >
         {/* Thanh cầm kéo nhẹ trên mobile (Drag handle indicator) */}
         <div className="w-12 h-1.5 bg-[#E9ECEA] rounded-full mx-auto mt-2.5 sm:hidden" />
@@ -169,7 +190,7 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
           </span>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleAnimatedClose}
             className="w-8 h-8 rounded-full bg-[#F7F8F7] hover:bg-[#E9ECEA] flex items-center justify-center text-[#727B77] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
             aria-label="Đóng chi tiết món"
           >
