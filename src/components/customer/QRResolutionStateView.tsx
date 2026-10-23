@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   QrCode,
   AlertCircle,
@@ -27,6 +27,7 @@ export type QRResolutionUiState =
 interface QRResolutionStateViewProps {
   state: QRResolutionUiState;
   retryAfterSeconds?: number;
+  retryAt?: number;
   onRetry?: () => void;
   className?: string;
 }
@@ -39,9 +40,21 @@ interface QRResolutionStateViewProps {
 export const QRResolutionStateView: React.FC<QRResolutionStateViewProps> = ({
   state,
   retryAfterSeconds,
+  retryAt,
   onRetry,
   className = '',
 }) => {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (state !== 'rate_limited' || !retryAt) return;
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= retryAt) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [state, retryAt]);
+  const remainingSeconds = retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : retryAfterSeconds;
   switch (state) {
     // 1. Trạng thái phân giải QR (Resolving skeleton)
     case 'resolving':
@@ -207,15 +220,17 @@ export const QRResolutionStateView: React.FC<QRResolutionStateViewProps> = ({
             Thao tác quá thường xuyên
           </h2>
           <p className="text-xs sm:text-sm text-[#727B77] mt-1.5 max-w-sm mx-auto leading-relaxed">
-            {retryAfterSeconds
-              ? `Vui lòng chờ khoảng ${retryAfterSeconds} giây trước khi thử nhập lại mã phiên bàn.`
-              : 'Hệ thống đang tạm hạn chế yêu cầu để bảo đảm an toàn. Vui lòng chờ ít giây rồi thử lại.'}
+            {remainingSeconds
+              ? `Vui lòng chờ khoảng ${remainingSeconds} giây trước khi thử lại.`
+              : retryAt ? 'Bạn có thể thử lại ngay bây giờ.'
+                : 'Hệ thống đang tạm hạn chế yêu cầu để bảo đảm an toàn. Vui lòng chờ ít giây rồi thử lại.'}
           </p>
           {onRetry && (
             <button
               type="button"
               onClick={onRetry}
-              className="mt-5 h-11 px-5 rounded-xl text-xs font-bold bg-[#1D725E] hover:bg-[#165B4B] text-white active:scale-95 transition-all inline-flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+              disabled={!!retryAt && !!remainingSeconds}
+              className="mt-5 h-11 px-5 rounded-xl text-xs font-bold bg-[#1D725E] hover:bg-[#165B4B] text-white active:scale-95 transition-all inline-flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RefreshCw className="w-4 h-4" aria-hidden="true" />
               <span>Thử lại</span>

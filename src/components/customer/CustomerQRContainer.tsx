@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { QRResolution, MenuCategory, MenuItem } from '../../../docs/contracts/types';
 import { CustomerOrderModeHeader } from './CustomerOrderModeHeader';
 import { TableVerificationCard } from './TableVerificationCard';
@@ -9,7 +9,9 @@ import { MenuPreviewSection } from './MenuPreviewSection';
 import { StickyCartPreview } from './StickyCartPreview';
 import { CustomerSkeleton } from './CustomerSkeleton';
 import { ItemDetailSheet, type SelectedItemPayload } from './ItemDetailSheet';
-import { fetchPublicMenu } from '../../features/customer/api-client';
+import { usePresentationCart, CartSheet } from './cart';
+import { createCartStore } from '../../features/cart';
+import { menuRequest, MenuApiError } from '../../features/customer/api-client';
 import {
   MOCK_STORE,
   MOCK_CATEGORIES,
@@ -72,6 +74,13 @@ function computeDemoResolution(
  */
 export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
   qrCode,
+  ...props
+}) => {
+  return <CustomerQRContainerContent key={qrCode} qrCode={qrCode} {...props} />;
+};
+
+const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
+  qrCode,
   initialResolution = null,
   categories = MOCK_CATEGORIES,
   items = MOCK_MENU_ITEMS,
@@ -79,319 +88,90 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
   className = '',
 }) => {
   const isDev = process.env.NODE_ENV !== 'production';
+  // Mock data is an explicit preview only, never a fallback for real API errors.
+  const isDemo = isDev && !!demoState;
   const demoSetup = computeDemoResolution(demoState, initialResolution);
-
-  // Trạng thái phân giải QR
-  const [resolution, setResolution] = useState<QRResolution | null>(demoSetup.res);
-  const [isResolving, setIsResolving] = useState<boolean>(!demoSetup.res && !demoSetup.err);
-  const [resolutionErrorState, setResolutionErrorState] = useState<QRResolutionUiState | null>(
-    demoSetup.err
-  );
-  const [retryAfterSec, setRetryAfterSec] = useState<number | undefined>(demoSetup.retrySec);
-
-  // Trạng thái menu thực tế / mock
-  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>(isDev ? categories : []);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(isDev ? items : []);
-  const [isMenuLoading, setIsMenuLoading] = useState<boolean>(true);
-  const [menuErrorMessage, setMenuErrorMessage] = useState<string | null>(null);
-  const [isMockPreview, setIsMockPreview] = useState<boolean>(false);
-
-  // Trạng thái xem chi tiết món ăn (Item Detail Sheet P2-G02)
+  const [previewResolution, setPreviewResolution] = useState<QRResolution | null>(demoSetup.res);
   const [selectedItemForDetail, setSelectedItemForDetail] = useState<MenuItem | null>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
-
-  // Trạng thái xác thực phiên bàn
-  const [isVerifying, setIsVerifying] = useState<boolean>(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
-  const [cartCount, setCartCount] = useState<number>(0);
-  const [cartTotal, setCartTotal] = useState<number>(0);
+  const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
 
-  // 1. Phân giải QR code thực tế từ máy chủ (R01 GET /api/public/qr/[code])
-  useEffect(() => {
-    // Nếu đã có kết quả từ demo hoặc SSR initial
-    if (resolution || resolutionErrorState) {
-      return;
-    }
-
-    let isMounted = true;
-
-    fetch(`/api/public/qr/${encodeURIComponent(qrCode)}`, {
-      credentials: 'include',
-      cache: 'no-store',
-      headers: { Accept: 'application/json' },
-    })
-      .then(async (res) => {
-        if (!isMounted) return;
-
-        if (res.ok) {
-          const json = await res.json();
-          if (json?.data) {
-            setResolution(json.data);
-            setIsResolving(false);
-            return;
-          }
-        }
-
-        // Xử lý chi tiết các mã lỗi theo handoff P2-C01
-        let errJson: {
-          error?: {
-            code?: string;
-            message?: string;
-            details?: { retryAfterSeconds?: number };
-          };
-        } | null = null;
-        try {
-          errJson = await res.json();
-        } catch {
-          // Response không phải JSON hợp lệ
-        }
-
-        const retryHeader = res.headers.get('Retry-After');
-        const retrySec =
-          errJson?.error?.details?.retryAfterSeconds ||
-          (retryHeader ? parseInt(retryHeader, 10) : undefined);
-
-        if (res.status === 429) {
-          setRetryAfterSec(retrySec || 30);
-          setResolution(null);
-          setResolutionErrorState('rate_limited');
-          setIsResolving(false);
-          return;
-        }
-
-        if (res.status === 404 || res.status === 400) {
-          setResolution(null);
-          setResolutionErrorState('invalid_qr');
-          setIsResolving(false);
-          return;
-        }
-
-        if (res.status === 410) {
-          setResolution(null);
-          setResolutionErrorState('session_locked_or_closed');
-          setIsResolving(false);
-          return;
-        }
-
-        // Trong production: Hiển thị lỗi máy chủ thực tế, tuyệt đối không dùng mock
-        if (!isDev) {
-          setResolution(null);
-          setResolutionErrorState('offline');
-          setIsResolving(false);
-          return;
-        }
-
-        // Fallback dev preview an toàn khi chạy offline không có API backend
-        const isTakeawayCode =
-          qrCode.toLowerCase().includes('takeaway') || qrCode.toLowerCase().includes('quay');
-        setResolution(isTakeawayCode ? MOCK_QR_TAKEAWAY : MOCK_QR_TABLE_UNVERIFIED);
-        setIsResolving(false);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        if (!isDev) {
-          setResolution(null);
-          setResolutionErrorState('offline');
-          setIsResolving(false);
-          return;
-        }
-        const isTakeawayCode =
-          qrCode.toLowerCase().includes('takeaway') || qrCode.toLowerCase().includes('quay');
-        setResolution(isTakeawayCode ? MOCK_QR_TAKEAWAY : MOCK_QR_TABLE_UNVERIFIED);
-        setIsResolving(false);
-      });
-
-    return () => {
-      isMounted = false;
+  // The store owns both R01 and R03. Rendering/subscribing never fetches again.
+  const [cartSource] = useState(() => {
+    let preview = demoSetup.res ?? MOCK_QR_TABLE_UNVERIFIED;
+    return {
+      store: createCartStore({
+        qrCode,
+        ...(isDemo ? {
+          storage: null,
+          loadResolution: async () => preview,
+          loadMenu: async () => ({ categories, items, menuRevision: 'demo-preview', serverTime: new Date().toISOString() }),
+        } : {}),
+      }),
+      setPreview: (next: QRResolution) => { preview = next; },
     };
-  }, [qrCode, resolution, resolutionErrorState, isDev]);
+  });
+  const cartStore = cartSource.store;
+  const { cart, cartState, cartActions, readiness } = usePresentationCart({
+    qrCode, store: cartStore,
+  });
+  const { loadError, refreshing, hydrated, menu } = cart.state;
+  const resolution = isDemo ? previewResolution : cart.state.resolution ?? initialResolution;
+  const isResolving = !isDemo && cart.state.online && !resolution && (!hydrated || refreshing);
+  const resolutionErrorState: QRResolutionUiState | null = isDemo ? demoSetup.err
+    : !cart.state.online ? 'offline'
+    : loadError?.stage !== 'resolution' ? null
+    : loadError.status === 429 ? 'rate_limited'
+    : loadError.status === 400 || loadError.status === 404 ? 'invalid_qr'
+    : loadError.status === 410 ? 'session_locked_or_closed'
+    : 'network_error';
+  const retryAfterSec = isDemo ? demoSetup.retrySec : undefined;
+  const menuCategories = menu?.categories ?? (isDemo ? categories : []);
+  const menuItems = menu?.items ?? (isDemo ? items : []);
+  const isMenuLoading = !isDemo && refreshing && !menu;
+  const menuErrorMessage = loadError?.stage === 'menu'
+    ? loadError.status === 429 ? 'Thao tác quá thường xuyên. Vui lòng chờ trước khi tải lại thực đơn.'
+      : 'Không thể tải thực đơn từ máy chủ của quán.'
+    : null;
 
-  // Thao tác thử lại khi gặp lỗi
-  const handleRetryResolve = () => {
-    setIsResolving(true);
-    setResolutionErrorState(null);
-    setResolution(null);
-    setRetryAfterSec(undefined);
+  const handleRetryResolve = () => { void cart.refresh(); };
+  const handleRetryMenu = () => { void cart.refresh(); };
+  const showDemoResolution = (next: QRResolution) => {
+    cartSource.setPreview(next);
+    setPreviewResolution(next);
+    cart.applyResolution(next);
+    cart.reconcileWithMenu({ categories, items, menuRevision: 'demo-preview', serverTime: new Date().toISOString() });
   };
 
-  // 2. Thao tác xác thực phiên bàn (R02 POST /api/public/table-sessions/verify)
   const handleVerifySession = async (sessionCode: string) => {
+    if (isVerifying) return;
     setIsVerifying(true);
     setVerifyError(null);
-
     try {
-      const res = await fetch('/api/public/table-sessions/verify', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          qrCode,
-          sessionCode: sessionCode.trim(),
-        }),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        if (json?.data) {
-          setResolution(json.data);
-          setIsVerifying(false);
-          setVerifyError(null);
+      if (isDemo) {
+        if (!DEMO_VALID_SESSION_CODES.includes(sessionCode.toUpperCase())) {
+          setVerifyError('Mã phiên mẫu không chính xác.');
           return;
         }
-      }
-
-      // Xử lý mã lỗi trả về từ API backend thực tế
-      let errorMsg = '';
-      try {
-        const errJson = await res.json();
-        errorMsg = errJson?.error?.message || '';
-      } catch {
-        // Response rỗng hoặc không parse được JSON
-      }
-
-      if (res.status === 422) {
-        setVerifyError(
-          errorMsg || 'Mã phiên không chính xác. Vui lòng kiểm tra lại với nhân viên quán.'
-        );
-        setIsVerifying(false);
+        showDemoResolution(MOCK_QR_TABLE_VERIFIED);
         return;
       }
-
-      if (res.status === 410) {
-        setVerifyError(
-          errorMsg || 'Phiên bàn này đã đóng hoặc mã đã hết hạn. Vui lòng nhờ nhân viên mở bàn mới.'
-        );
-        setIsVerifying(false);
-        return;
-      }
-
-      if (res.status === 429) {
-        setVerifyError(
-          errorMsg || 'Thao tác quá thường xuyên. Vui lòng đợi trong giây lát rồi thử lại.'
-        );
-        setIsVerifying(false);
-        return;
-      }
-
-      if (res.status === 409) {
-        setVerifyError(
-          errorMsg || 'Bàn đang ở trạng thái không thể nhận thêm thao tác.'
-        );
-        setIsVerifying(false);
-        return;
-      }
-
-      if (res.status === 400) {
-        setVerifyError(
-          errorMsg || 'Định dạng mã phiên không hợp lệ. Vui lòng kiểm tra lại.'
-        );
-        setIsVerifying(false);
-        return;
-      }
-
-      // 403, 404, 500 hoặc lỗi khác
-      setVerifyError(
-        errorMsg || 'Không thể xác minh phiên bàn. Vui lòng liên hệ nhân viên quán.'
-      );
+      const verified = await menuRequest<QRResolution>('/api/public/table-sessions/verify', 'POST', {
+        qrCode, sessionCode: sessionCode.trim(),
+      });
+      // Invalidate any older R01 response before applying the verified DTO.
+      const result = cart.applyResolution(verified);
+      if (!result.ok) { setVerifyError(result.issue.message); return; }
+      // If verification interrupted initial menu loading, complete the shared load.
+      if (!cartStore.getState().menuFresh) await cart.refresh();
+    } catch (error) {
+      setVerifyError(error instanceof MenuApiError ? error.error.message
+        : 'Lỗi kết nối máy chủ. Vui lòng kiểm tra đường truyền và thử lại.');
+    } finally {
       setIsVerifying(false);
-      return;
-    } catch {
-      // Lỗi mạng hoặc server không phản hồi
-      if (!isDev) {
-        setVerifyError('Lỗi kết nối máy chủ. Vui lòng kiểm tra đường truyền và thử lại.');
-        setIsVerifying(false);
-        return;
-      }
     }
-
-    // CHỈ DÀNH RIÊNG CHO MÔI TRƯỜNG DEV/PREVIEW KHI SERVER CODEX CHƯA CHẠY:
-    if (isDev) {
-      setTimeout(() => {
-        setIsVerifying(false);
-        const isCodeValid =
-          DEMO_VALID_SESSION_CODES.includes(sessionCode.toUpperCase()) || sessionCode === '8821';
-        if (isCodeValid) {
-          setResolution({
-            type: 'table',
-            mode: 'dine_in',
-            store: resolution?.store || MOCK_STORE,
-            table: resolution?.table || { id: 'c0200000-0000-4000-8000-000000000002', label: 'Bàn 01' },
-            requiresSessionCode: false,
-            session: { id: 'c0200000-0000-4000-8000-000000000010', status: 'open' },
-          });
-        } else {
-          setVerifyError('Mã phiên không chính xác. (Mã mẫu hợp lệ dev: 8821 hoặc MOC88)');
-        }
-      }, 350);
-    }
-  };
-
-  // 1b. Nạp thực đơn từ backend R03 (GET /api/public/menu?qrCode=...)
-  useEffect(() => {
-    let isMounted = true;
-
-    fetchPublicMenu(qrCode)
-      .then((data) => {
-        if (!isMounted) return;
-        if (data && data.categories && data.items) {
-          // Lọc các món active (đảm bảo không lọt item inactive vào menu khách)
-          const activeOnly = data.items.filter(
-            (it) => (it as unknown as { active?: boolean }).active !== false
-          );
-          setMenuCategories(data.categories);
-          setMenuItems(activeOnly);
-          setIsMockPreview(false);
-        }
-        setIsMenuLoading(false);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        if (isDev) {
-          setMenuCategories(categories);
-          setMenuItems(items);
-          setIsMockPreview(true);
-          setIsMenuLoading(false);
-        } else {
-          setMenuCategories([]);
-          setMenuItems([]);
-          setMenuErrorMessage('Không thể tải thực đơn từ máy chủ của quán.');
-          setIsMenuLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [qrCode, isDev, categories, items]);
-
-  const handleRetryMenu = () => {
-    setIsMenuLoading(true);
-    setMenuErrorMessage(null);
-    fetchPublicMenu(qrCode)
-      .then((data) => {
-        if (data && data.categories && data.items) {
-          const activeOnly = data.items.filter(
-            (it) => (it as unknown as { active?: boolean }).active !== false
-          );
-          setMenuCategories(data.categories);
-          setMenuItems(activeOnly);
-          setIsMockPreview(false);
-        }
-        setIsMenuLoading(false);
-      })
-      .catch(() => {
-        if (isDev) {
-          setMenuCategories(categories);
-          setMenuItems(items);
-          setIsMockPreview(true);
-          setIsMenuLoading(false);
-        } else {
-          setMenuCategories([]);
-          setMenuItems([]);
-          setMenuErrorMessage('Không thể tải thực đơn từ máy chủ của quán.');
-          setIsMenuLoading(false);
-        }
-      });
   };
 
   // 3. Tương tác xem chi tiết & chọn món (Item Detail Sheet P2-G02)
@@ -401,9 +181,13 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
   };
 
   const handleSelectItem = (selection: SelectedItemPayload) => {
-    // Presentation preview event: Cập nhật badge số lượng và giá tạm tính nổi
-    setCartCount((prev) => prev + selection.quantity);
-    setCartTotal((prev) => prev + selection.previewTotalVnd);
+    // Thêm món vào giỏ hàng qua Cart Facade
+    return cartActions.addLine({
+      menuItemId: selection.menuItemId,
+      quantity: selection.quantity,
+      optionIds: selection.optionIds,
+      note: selection.note ?? null,
+    });
   };
 
   // NẾU ĐANG PHÂN GIẢI QR (RESOLVING STATE)
@@ -425,6 +209,7 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
           <QRResolutionStateView
             state={resolutionErrorState || 'invalid_qr'}
             retryAfterSeconds={retryAfterSec}
+            retryAt={isDemo ? undefined : loadError?.retryAt ?? undefined}
             onRetry={handleRetryResolve}
           />
         </div>
@@ -452,20 +237,19 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
           store={resolution.store}
           mode={resolution.mode}
           tableLabel={tableLabel}
-          cartItemCount={cartCount}
-          onOpenCart={() => {}}
+          cartItemCount={cartState.totalQuantity}
+          onOpenCart={() => setIsCartSheetOpen(true)}
         />
 
         {/* Thanh gạt chuyển nhanh trạng thái kiểm thử cho QA/Chủ quán (Dev Toolbar - Chỉ hiển thị trong Dev) */}
-        {isDev && (
+        {isDemo && (
           <div className="bg-[#FAFBFB] border-b border-[#E9ECEA] px-3 py-1.5 flex items-center justify-between text-[11px] text-[#727B77] overflow-x-auto scrollbar-none">
             <span className="font-semibold text-[#1D725E] flex-shrink-0 mr-2">Chế độ xem (Dev):</span>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => {
-                  setResolution(MOCK_QR_TABLE_UNVERIFIED);
-                  setResolutionErrorState(null);
+                  showDemoResolution(MOCK_QR_TABLE_UNVERIFIED);
                 }}
                 className={`px-2 py-0.5 rounded transition-colors ${
                   isTableUnverified ? 'bg-[#35977D] text-white font-bold' : 'hover:bg-[#E9ECEA]'
@@ -476,8 +260,7 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setResolution(MOCK_QR_TABLE_VERIFIED);
-                  setResolutionErrorState(null);
+                  showDemoResolution(MOCK_QR_TABLE_VERIFIED);
                 }}
                 className={`px-2 py-0.5 rounded transition-colors ${
                   isTableVerified ? 'bg-[#35977D] text-white font-bold' : 'hover:bg-[#E9ECEA]'
@@ -488,8 +271,7 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setResolution(MOCK_QR_TAKEAWAY);
-                  setResolutionErrorState(null);
+                  showDemoResolution(MOCK_QR_TAKEAWAY);
                 }}
                 className={`px-2 py-0.5 rounded transition-colors ${
                   isTakeaway ? 'bg-[#35977D] text-white font-bold' : 'hover:bg-[#E9ECEA]'
@@ -546,7 +328,7 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
             isTableVerified={isTableVerified}
             isTakeaway={isTakeaway}
             isLoading={isMenuLoading}
-            isMockPreview={isMockPreview}
+            isMockPreview={isDemo}
             errorMessage={menuErrorMessage}
             onRetry={handleRetryMenu}
             onItemClick={handleOpenItemDetail}
@@ -558,11 +340,11 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
       {/* =================================================================
           4. Thanh Giỏ Hàng Nổi Đáy (Sticky Cart Preview)
          ================================================================= */}
-      {cartCount > 0 && (
+      {cartState.totalQuantity > 0 && (
         <StickyCartPreview
-          itemCount={cartCount}
-          totalVnd={cartTotal}
-          onOpenCart={() => {}}
+          itemCount={cartState.totalQuantity}
+          totalVnd={cartState.subtotalVnd}
+          onOpenCart={() => setIsCartSheetOpen(true)}
         />
       )}
 
@@ -573,8 +355,32 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
         item={selectedItemForDetail}
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
-        canAddToCart={isTakeaway || isTableVerified}
+        canAddToCart={true}
+        isTableVerified={isTableVerified}
+        isTakeaway={isTakeaway}
         onSelectItem={handleSelectItem}
+      />
+
+      {/* =================================================================
+          6. Khung Giỏ Hàng & Xem Lại Đơn (Customer Cart Sheet P2-G03)
+         ================================================================= */}
+      <CartSheet
+        isOpen={isCartSheetOpen}
+        onClose={() => setIsCartSheetOpen(false)}
+        cartState={cartState}
+        cartActions={cartActions}
+        readiness={readiness}
+        isTakeaway={isTakeaway}
+        tableLabel={tableLabel || 'Bàn'}
+        isTableVerified={isTableVerified}
+        menuItems={menuItems}
+        onGoToVerifyTable={() => {
+          const input = document.querySelector<HTMLInputElement>('input[name="sessionCode"]');
+          if (input) {
+            input.focus();
+            input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }}
       />
     </div>
   );

@@ -142,7 +142,7 @@ export const TableVerificationCard: React.FC<TableVerificationCardProps> = ({
               placeholder="Nhập mã phiên (do quán cung cấp)"
               aria-describedby={displayError ? errorId : hintId}
               aria-invalid={!!displayError}
-              className={`flex-1 h-12 px-3.5 bg-[#F7F8F7] border rounded-xl text-sm font-semibold text-[#1D2522] placeholder-[#727B77] transition-all focus:outline-none focus:ring-2 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
+              className={`flex-1 h-12 min-h-12 px-3.5 bg-[#F7F8F7] border rounded-xl text-sm font-semibold text-[#1D2522] placeholder-[#727B77] transition-all focus:outline-none focus:ring-2 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
                 displayError
                   ? 'border-[#B42318] focus:ring-[#B42318] bg-[#FEF3F2]/30'
                   : 'border-[#E9ECEA] focus:ring-[#35977D]'

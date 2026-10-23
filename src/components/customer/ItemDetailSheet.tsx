@@ -10,7 +10,7 @@ import {
   Coffee,
   Info,
   AlertCircle,
-  Sparkles,
+  ShoppingBag,
 } from 'lucide-react';
 import type { MenuItem, MenuOption } from '../../../docs/contracts/types';
 
@@ -27,24 +27,28 @@ interface ItemDetailSheetProps {
   isOpen: boolean;
   onClose: () => void;
   canAddToCart?: boolean;
+  isTableVerified?: boolean;
+  isTakeaway?: boolean;
   onSelectItem?: (selection: SelectedItemPayload) => void;
   className?: string;
 }
 
 /**
  * ItemDetailSheet — Khung trượt (Sheet / Dialog) hiển thị chi tiết món ăn và chọn tùy chọn (Options).
- * Tuân thủ yêu cầu Nhiệm vụ B (P2-G02):
+ * Tuân thủ yêu cầu Nhiệm vụ B (P2-G02 & P2-G03):
  * - Hiển thị ảnh lớn (hoặc placeholder sắc nét), tên, mô tả, giá cơ bản.
  * - Danh sách tùy chọn lấy từ data contract (`item.options`), tính tổng tiền tạm tính số nguyên VND.
  * - Cho phép chọn số lượng (1–99) và nhập ghi chú (tối đa 500 ký tự).
  * - Cảnh báo rõ ràng nếu bàn chưa xác thực hoặc nếu món hết hàng.
- * - Chỉ phát event callback `onSelectItem`, không tạo cart store giả mạo hay toast "Đã thêm giỏ hàng" khi chưa có giỏ.
+ * - Phát event callback `onSelectItem` để nạp vào giỏ hàng thật.
  */
 export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
   item,
   isOpen,
   onClose,
-  canAddToCart = false,
+  canAddToCart = true,
+  isTableVerified = false,
+  isTakeaway = false,
   onSelectItem,
   className = '',
 }) => {
@@ -56,6 +60,8 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
   const [quantity, setQuantity] = useState<number>(1);
   const [selectedOptionIds, setSelectedOptionIds] = useState<Set<string>>(new Set());
   const [note, setNote] = useState<string>('');
+  const [isAddedFeedback, setIsAddedFeedback] = useState<boolean>(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Reset state khi đổi món theo mẫu chuẩn React mà không dùng setState trong effect
   if (item && item.id !== prevItemId) {
@@ -63,6 +69,8 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
     setQuantity(1);
     setSelectedOptionIds(new Set());
     setNote('');
+    setIsAddedFeedback(false);
+    setActionError(null);
   }
 
   // Đóng khi nhấn ESC
@@ -109,15 +117,27 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
   const handleConfirmSelect = () => {
     if (!item.available || !canAddToCart) return;
 
-    onSelectItem?.({
-      menuItemId: item.id,
-      quantity,
-      optionIds: Array.from(selectedOptionIds),
-      note: note.trim() || undefined,
-      previewTotalVnd,
-    });
+    if (onSelectItem) {
+      const res = onSelectItem({
+        menuItemId: item.id,
+        quantity,
+        optionIds: Array.from(selectedOptionIds),
+        note: note.trim() || undefined,
+        previewTotalVnd,
+      }) as unknown as { ok?: boolean; issue?: { message?: string } } | undefined;
 
-    onClose();
+      if (res && res.ok === false) {
+        setActionError(res.issue?.message || 'Không thể thêm món vào giỏ hàng.');
+        return;
+      }
+    }
+
+    setActionError(null);
+    setIsAddedFeedback(true);
+    setTimeout(() => {
+      setIsAddedFeedback(false);
+      onClose();
+    }, 400);
   };
 
   return (
@@ -338,12 +358,11 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
           </div>
 
           {/* Cảnh báo bàn chưa xác nhận nếu có */}
-          {!canAddToCart && (
+          {!isTableVerified && !isTakeaway && (
             <div className="p-3 rounded-xl bg-[#FEF6EE] border border-[#F9DBAF] flex items-start gap-2 text-xs text-[#8A4D00]">
               <AlertCircle className="w-4 h-4 text-[#8A4D00] flex-shrink-0 mt-0.5" aria-hidden="true" />
               <span>
-                Bạn đang ở chế độ xem trước. Vui lòng hoàn tất xác nhận mã phiên bàn để kích hoạt
-                chức năng chọn món và gửi đơn.
+                Món sẽ được thêm vào giỏ hàng. Bạn cần xác thực mã phiên bàn trước khi gửi đơn đặt món.
               </span>
             </div>
           )}
@@ -351,6 +370,13 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
 
         {/* Footer: Tổng tiền tạm tính & Nút hành động */}
         <div className="p-4 bg-white border-t border-[#E9ECEA] space-y-2">
+          {actionError && (
+            <div className="p-2.5 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-center gap-2 text-xs text-[#B42318]">
+              <AlertCircle className="w-4 h-4 text-[#B42318] flex-shrink-0" aria-hidden="true" />
+              <span>{actionError}</span>
+            </div>
+          )}
+
           <div className="flex items-center justify-between text-xs px-1">
             <span className="text-[#727B77]">Tổng tạm tính:</span>
             <span className="text-base font-bold text-[#1D2522]">
@@ -360,25 +386,32 @@ export const ItemDetailSheet: React.FC<ItemDetailSheetProps> = ({
 
           <button
             type="button"
-            disabled={!item.available || !canAddToCart}
+            disabled={!item.available || !canAddToCart || isAddedFeedback}
             onClick={handleConfirmSelect}
             className={`w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
-              !item.available
+              isAddedFeedback
+                ? 'bg-[#1D725E] text-white'
+                : !item.available
                 ? 'bg-[#F1F3F2] text-[#A0A8A5] cursor-not-allowed'
                 : !canAddToCart
                 ? 'bg-[#FAFBFB] border border-[#E9ECEA] text-[#727B77] cursor-not-allowed'
                 : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-95 text-white'
             }`}
           >
-            {!item.available ? (
+            {isAddedFeedback ? (
+              <>
+                <Check className="w-4 h-4 stroke-[3]" aria-hidden="true" />
+                <span>Đã thêm vào giỏ hàng!</span>
+              </>
+            ) : !item.available ? (
               <span>Món ăn hiện đã hết hàng</span>
             ) : !canAddToCart ? (
               <span>Cần xác nhận bàn để chọn món</span>
             ) : (
               <>
-                <Sparkles className="w-4 h-4" aria-hidden="true" />
+                <ShoppingBag className="w-4 h-4" aria-hidden="true" />
                 <span>
-                  Chọn món · {new Intl.NumberFormat('vi-VN').format(previewTotalVnd)} đ
+                  Thêm vào giỏ · {new Intl.NumberFormat('vi-VN').format(previewTotalVnd)} đ
                 </span>
               </>
             )}

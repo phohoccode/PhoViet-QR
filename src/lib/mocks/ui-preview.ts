@@ -635,4 +635,62 @@ export const MOCK_OWNER_MENU_VIEW: OwnerMenuView = {
   serverTime: '2026-10-23T07:30:00Z',
 };
 
+/* =============================================================================
+   MOCK FIXTURES CHO CUSTOMER CART SHEET (PHASE 2 — P2-G03)
+   ============================================================================= */
 
+export interface MockCartItemFixture {
+  lineId: string;
+  menuItemId: string;
+  name: string;
+  basePriceVnd: number;
+  quantity: number;
+  selectedOptions: { id: string; name: string; priceDeltaVnd: number }[];
+  note: string | null;
+  imageUrl: string | null;
+  available: boolean;
+  priceChanged?: boolean;
+  invalidOptionIds?: string[];
+}
+
+export const MOCK_CART_ITEMS: MockCartItemFixture[] = [
+  {
+    lineId: 'item-01::opt-02::it duong',
+    menuItemId: 'item-01',
+    name: 'Cà phê muối xứ Huế',
+    basePriceVnd: 35000,
+    quantity: 2,
+    selectedOptions: [
+      { id: 'opt-02', name: 'Thêm kem muối', priceDeltaVnd: 8000 },
+    ],
+    note: 'Ít đường, nhiều đá',
+    imageUrl: null,
+    available: true,
+  },
+  {
+    lineId: 'item-02::::',
+    menuItemId: 'item-02',
+    name: 'Bạc xỉu ba tầng',
+    basePriceVnd: 32000,
+    quantity: 1,
+    selectedOptions: [],
+    note: null,
+    imageUrl: null,
+    available: true,
+  },
+];
+
+export const MOCK_CART_ITEMS_WITH_UNAVAILABLE: MockCartItemFixture[] = [
+  ...MOCK_CART_ITEMS,
+  {
+    lineId: 'item-03::::',
+    menuItemId: 'item-03',
+    name: 'Cà phê cốt dừa đá xay',
+    basePriceVnd: 45000,
+    quantity: 1,
+    selectedOptions: [],
+    note: null,
+    imageUrl: null,
+    available: false, // Hết hàng
+  },
+];

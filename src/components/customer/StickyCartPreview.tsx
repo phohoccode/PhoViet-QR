@@ -5,7 +5,7 @@ import { ShoppingBag, ArrowRight } from 'lucide-react';
 
 interface StickyCartPreviewProps {
   itemCount: number;
-  totalVnd: number;
+  totalVnd: number | null;
   onOpenCart?: () => void;
   className?: string;
 }
@@ -24,7 +24,10 @@ export const StickyCartPreview: React.FC<StickyCartPreviewProps> = ({
 }) => {
   if (itemCount <= 0) return null;
 
-  const formattedTotal = new Intl.NumberFormat('vi-VN').format(totalVnd) + ' đ';
+  const formattedTotal =
+    totalVnd === null
+      ? 'Vượt giới hạn tạm tính'
+      : new Intl.NumberFormat('vi-VN').format(totalVnd) + ' đ';
 
   return (
     <aside
@@ -47,7 +50,7 @@ export const StickyCartPreview: React.FC<StickyCartPreviewProps> = ({
           </div>
           <div className="text-left">
             <p className="text-[11px] text-white/80 font-medium leading-none">
-              Giỏ hàng tạm tính (Xem trước)
+              Tạm tính · {itemCount} món
             </p>
             <p className="text-sm font-bold tracking-tight text-white mt-1 leading-none">
               {formattedTotal}

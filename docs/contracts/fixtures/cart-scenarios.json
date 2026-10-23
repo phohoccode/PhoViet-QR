@@ -1,0 +1,51 @@
+{
+  "baseMenuFixture": "docs/contracts/fixtures/menu-public.json",
+  "contexts": {
+    "dineInUnverified": {
+      "qrCode": "CART_DEMO_TABLE",
+      "resolution": {
+        "type": "table",
+        "mode": "dine_in",
+        "store": { "id": "c0230000-0000-4000-8000-000000000001", "name": "Quán demo", "timezone": "Asia/Ho_Chi_Minh", "acceptingOrders": true },
+        "table": { "id": "c0230000-0000-4000-8000-000000000002", "label": "Bàn 01" },
+        "requiresSessionCode": true,
+        "session": null
+      }
+    },
+    "dineInVerified": {
+      "qrCode": "CART_DEMO_TABLE",
+      "resolution": {
+        "type": "table",
+        "mode": "dine_in",
+        "store": { "id": "c0230000-0000-4000-8000-000000000001", "name": "Quán demo", "timezone": "Asia/Ho_Chi_Minh", "acceptingOrders": true },
+        "table": { "id": "c0230000-0000-4000-8000-000000000002", "label": "Bàn 01" },
+        "requiresSessionCode": false,
+        "session": { "id": "c0230000-0000-4000-8000-000000000003", "status": "open" }
+      }
+    },
+    "takeaway": {
+      "qrCode": "CART_DEMO_COUNTER",
+      "resolution": {
+        "type": "takeaway",
+        "mode": "takeaway",
+        "store": { "id": "c0230000-0000-4000-8000-000000000001", "name": "Quán demo", "timezone": "Asia/Ho_Chi_Minh", "acceptingOrders": true },
+        "table": null,
+        "requiresSessionCode": false,
+        "session": null
+      }
+    }
+  },
+  "selections": {
+    "normal": { "menuItemId": "c0220000-0000-4000-8000-000000000011", "quantity": 1, "optionIds": [], "note": null },
+    "withOption": { "menuItemId": "c0220000-0000-4000-8000-000000000011", "quantity": 2, "optionIds": ["c0220000-0000-4000-8000-000000000021"], "note": null },
+    "noteA": { "menuItemId": "c0220000-0000-4000-8000-000000000011", "quantity": 1, "optionIds": [], "note": "Ít đá" },
+    "noteB": { "menuItemId": "c0220000-0000-4000-8000-000000000011", "quantity": 1, "optionIds": [], "note": "Không đá" },
+    "soldOut": { "menuItemId": "c0220000-0000-4000-8000-000000000012", "quantity": 1, "optionIds": [], "note": null }
+  },
+  "menuChanges": {
+    "menuRevision": "c0230000-0000-4000-8000-000000000090",
+    "itemId": "c0220000-0000-4000-8000-000000000011",
+    "priceVnd": 31000,
+    "removedOptionId": "c0220000-0000-4000-8000-000000000021"
+  }
+}
