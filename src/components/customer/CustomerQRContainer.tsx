@@ -8,6 +8,8 @@ import { QRResolutionStateView, type QRResolutionUiState } from './QRResolutionS
 import { MenuPreviewSection } from './MenuPreviewSection';
 import { StickyCartPreview } from './StickyCartPreview';
 import { CustomerSkeleton } from './CustomerSkeleton';
+import { ItemDetailSheet, type SelectedItemPayload } from './ItemDetailSheet';
+import { fetchPublicMenu } from '../../features/customer/api-client';
 import {
   MOCK_STORE,
   MOCK_CATEGORIES,
@@ -86,6 +88,17 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
     demoSetup.err
   );
   const [retryAfterSec, setRetryAfterSec] = useState<number | undefined>(demoSetup.retrySec);
+
+  // Trạng thái menu thực tế / mock
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>(isDev ? categories : []);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(isDev ? items : []);
+  const [isMenuLoading, setIsMenuLoading] = useState<boolean>(true);
+  const [menuErrorMessage, setMenuErrorMessage] = useState<string | null>(null);
+  const [isMockPreview, setIsMockPreview] = useState<boolean>(false);
+
+  // Trạng thái xem chi tiết món ăn (Item Detail Sheet P2-G02)
+  const [selectedItemForDetail, setSelectedItemForDetail] = useState<MenuItem | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
 
   // Trạng thái xác thực phiên bàn
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
@@ -313,10 +326,84 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
     }
   };
 
-  // 3. Tương tác thêm món xem trước (Presentational preview)
-  const handleItemAdd = (item: MenuItem) => {
-    setCartCount((prev) => prev + 1);
-    setCartTotal((prev) => prev + item.priceVnd);
+  // 1b. Nạp thực đơn từ backend R03 (GET /api/public/menu?qrCode=...)
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchPublicMenu(qrCode)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data && data.categories && data.items) {
+          // Lọc các món active (đảm bảo không lọt item inactive vào menu khách)
+          const activeOnly = data.items.filter(
+            (it) => (it as unknown as { active?: boolean }).active !== false
+          );
+          setMenuCategories(data.categories);
+          setMenuItems(activeOnly);
+          setIsMockPreview(false);
+        }
+        setIsMenuLoading(false);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        if (isDev) {
+          setMenuCategories(categories);
+          setMenuItems(items);
+          setIsMockPreview(true);
+          setIsMenuLoading(false);
+        } else {
+          setMenuCategories([]);
+          setMenuItems([]);
+          setMenuErrorMessage('Không thể tải thực đơn từ máy chủ của quán.');
+          setIsMenuLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [qrCode, isDev, categories, items]);
+
+  const handleRetryMenu = () => {
+    setIsMenuLoading(true);
+    setMenuErrorMessage(null);
+    fetchPublicMenu(qrCode)
+      .then((data) => {
+        if (data && data.categories && data.items) {
+          const activeOnly = data.items.filter(
+            (it) => (it as unknown as { active?: boolean }).active !== false
+          );
+          setMenuCategories(data.categories);
+          setMenuItems(activeOnly);
+          setIsMockPreview(false);
+        }
+        setIsMenuLoading(false);
+      })
+      .catch(() => {
+        if (isDev) {
+          setMenuCategories(categories);
+          setMenuItems(items);
+          setIsMockPreview(true);
+          setIsMenuLoading(false);
+        } else {
+          setMenuCategories([]);
+          setMenuItems([]);
+          setMenuErrorMessage('Không thể tải thực đơn từ máy chủ của quán.');
+          setIsMenuLoading(false);
+        }
+      });
+  };
+
+  // 3. Tương tác xem chi tiết & chọn món (Item Detail Sheet P2-G02)
+  const handleOpenItemDetail = (item: MenuItem) => {
+    setSelectedItemForDetail(item);
+    setIsDetailOpen(true);
+  };
+
+  const handleSelectItem = (selection: SelectedItemPayload) => {
+    // Presentation preview event: Cập nhật badge số lượng và giá tạm tính nổi
+    setCartCount((prev) => prev + selection.quantity);
+    setCartTotal((prev) => prev + selection.previewTotalVnd);
   };
 
   // NẾU ĐANG PHÂN GIẢI QR (RESOLVING STATE)
@@ -450,15 +537,20 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
         )}
 
         {/* =================================================================
-            3. Vỏ Khung Xem Trước Thực Đơn (Menu Preview Shell P2-G01)
+            3. Vỏ Khung Xem Trước Thực Đơn (Menu Customer Shell P2-G02)
            ================================================================= */}
         <div className="pt-2">
           <MenuPreviewSection
-            categories={categories}
-            items={items}
+            categories={menuCategories}
+            items={menuItems}
             isTableVerified={isTableVerified}
             isTakeaway={isTakeaway}
-            onItemAdd={handleItemAdd}
+            isLoading={isMenuLoading}
+            isMockPreview={isMockPreview}
+            errorMessage={menuErrorMessage}
+            onRetry={handleRetryMenu}
+            onItemClick={handleOpenItemDetail}
+            onItemAdd={handleOpenItemDetail}
           />
         </div>
       </div>
@@ -473,6 +565,17 @@ export const CustomerQRContainer: React.FC<CustomerQRContainerProps> = ({
           onOpenCart={() => {}}
         />
       )}
+
+      {/* =================================================================
+          5. Khung Trượt Chi Tiết & Tùy Chọn Món Ăn (Item Detail Sheet P2-G02)
+         ================================================================= */}
+      <ItemDetailSheet
+        item={selectedItemForDetail}
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        canAddToCart={isTakeaway || isTableVerified}
+        onSelectItem={handleSelectItem}
+      />
     </div>
   );
 };

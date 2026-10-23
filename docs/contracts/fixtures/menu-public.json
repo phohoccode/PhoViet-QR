@@ -1,0 +1,78 @@
+{
+  "data": {
+    "categories": [
+      {
+        "id": "c0220000-0000-4000-8000-000000000001",
+        "name": "Cà phê",
+        "sortOrder": 1
+      },
+      {
+        "id": "c0220000-0000-4000-8000-000000000002",
+        "name": "Trà và bánh",
+        "sortOrder": 2
+      }
+    ],
+    "items": [
+      {
+        "id": "c0220000-0000-4000-8000-000000000011",
+        "categoryId": "c0220000-0000-4000-8000-000000000001",
+        "name": "Cà phê sữa",
+        "description": "Cà phê pha phin",
+        "priceVnd": 29000,
+        "imageUrl": null,
+        "available": true,
+        "options": [
+          {
+            "id": "c0220000-0000-4000-8000-000000000021",
+            "name": "Thêm cà phê",
+            "priceDeltaVnd": 6000,
+            "available": true
+          },
+          {
+            "id": "c0220000-0000-4000-8000-000000000022",
+            "name": "Thêm sữa",
+            "priceDeltaVnd": 3000,
+            "available": true
+          }
+        ],
+        "updatedAt": "2026-10-23T10:00:00.000001+00:00"
+      },
+      {
+        "id": "c0220000-0000-4000-8000-000000000012",
+        "categoryId": "c0220000-0000-4000-8000-000000000001",
+        "name": "Cà phê muối",
+        "description": null,
+        "priceVnd": 35000,
+        "imageUrl": "https://images.unsplash.com/photo-1509042239860-f550ce710b93",
+        "available": false,
+        "options": [],
+        "updatedAt": "2026-10-23T10:00:00.000001+00:00"
+      },
+      {
+        "id": "c0220000-0000-4000-8000-000000000013",
+        "categoryId": "c0220000-0000-4000-8000-000000000002",
+        "name": "Trà đào",
+        "description": null,
+        "priceVnd": 32000,
+        "imageUrl": null,
+        "available": true,
+        "options": [],
+        "updatedAt": "2026-10-23T10:00:00.000001+00:00"
+      },
+      {
+        "id": "c0220000-0000-4000-8000-000000000014",
+        "categoryId": "c0220000-0000-4000-8000-000000000002",
+        "name": "Nước lọc",
+        "description": null,
+        "priceVnd": 0,
+        "imageUrl": null,
+        "available": true,
+        "options": [],
+        "updatedAt": "2026-10-23T10:00:00.000001+00:00"
+      }
+    ],
+    "menuRevision": "c0220000-0000-4000-8000-000000000090",
+    "serverTime": "2026-10-23T10:00:00.000001+00:00"
+  },
+  "error": null
+}

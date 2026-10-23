@@ -331,3 +331,10 @@ export interface WebhookReceipt {
   received: true;
   outcome: 'accepted' | 'duplicate' | 'recorded_exception' | 'ignored';
 }
+
+// P2-C02 additive category CRUD contract; existing R03/R14/R15/R16 DTOs unchanged.
+export interface OwnerMenuCategory extends MenuCategory { active: boolean; updatedAt: IsoTimestamp }
+export interface CreateMenuCategoryInput extends RequestCommand { name: string; sortOrder: number; active: boolean }
+export type PatchMenuCategoryInput = RequestCommand & Partial<Pick<CreateMenuCategoryInput, 'name' | 'sortOrder' | 'active'>> & { expectedUpdatedAt: IsoTimestamp };
+export type PublicMenuResponse = MenuV1View;
+export type OwnerMenuResponse = OwnerMenuView;

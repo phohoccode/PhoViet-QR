@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Play, Plus, QrCode, RefreshCw, Loader2, KeyRound, ExternalLink } from 'lucide-react';
+import { Play, QrCode, RefreshCw, Loader2, KeyRound, ExternalLink } from 'lucide-react';
 import type {
   OrderDetail,
   TableSummary,
@@ -20,8 +20,8 @@ import { TableSessionOpenedDialog, TableDetailDialog } from './TableSessionDialo
 import {
   OrdersQueueSkeleton,
   TablesGridSkeleton,
-  MenuGridSkeleton,
 } from './OwnerTabSkeletons';
+import { OwnerMenuView } from './menu/OwnerMenuView';
 
 export type OwnerTabState = 'ready' | 'loading' | 'empty' | 'error';
 
@@ -60,7 +60,6 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
   storeName,
   orders,
   tables = [],
-  menuItems = [],
   initialTab = 'orders',
   ownerName,
   roleLabel,
@@ -68,10 +67,8 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
   logoutError = null,
   ordersState = 'ready',
   tablesState = 'ready',
-  menuState = 'ready',
   onRetryOrders,
   onRetryTables,
-  onRetryMenu,
   onClaimNext,
   onLogout,
   logoutAction,
@@ -750,71 +747,9 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
           )}
 
           {/* =================================================================
-              TAB 3: MENU (Quản lý món ăn)
+              TAB 3: MENU (Quản lý món ăn P2-G02)
              ================================================================= */}
-          {activeTab === 'menu' && (
-            <div className="flex-1 flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-[#E9ECEA]">
-                <div>
-                  <h3 className="text-base font-bold text-[#1D2522]">Thực đơn quán</h3>
-                  <p className="text-xs text-[#727B77]">
-                    Bật / tắt nhanh trạng thái còn hàng hoặc sửa giá món ăn.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="h-9 px-3.5 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
-                >
-                  <Plus className="w-4 h-4" aria-hidden="true" />
-                  <span>Thêm món mới (Phase 2)</span>
-                </button>
-              </div>
-
-              {menuState === 'loading' && <MenuGridSkeleton />}
-
-              {menuState === 'error' && (
-                <OwnerErrorState
-                  title="Không thể tải thực đơn quán"
-                  description="Có lỗi khi nạp danh sách món ăn từ máy chủ."
-                  onRetry={onRetryMenu}
-                />
-              )}
-
-              {menuState === 'ready' && menuItems.length === 0 && (
-                <OwnerEmptyState
-                  title="Thực đơn hiện đang trống"
-                  description="Quán chưa có món ăn nào trong thực đơn."
-                />
-              )}
-
-              {menuState === 'ready' && menuItems.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
-                  {menuItems.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 bg-white rounded-2xl border border-[#E9ECEA] flex items-center justify-between gap-3 shadow-xs"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-[#1D2522] truncate">{item.name}</p>
-                        <p className="text-xs text-[#727B77] mt-0.5">
-                          {new Intl.NumberFormat('vi-VN').format(item.priceVnd)} đ
-                        </p>
-                      </div>
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex-shrink-0 ${
-                          item.available
-                            ? 'bg-[#E8F4F0] text-[#1D725E] border border-[#C6E7DC]'
-                            : 'bg-[#FEF3F2] text-[#912018] border border-[#FECDCA]'
-                        }`}
-                      >
-                        {item.available ? 'Còn hàng' : 'Hết hàng'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {activeTab === 'menu' && <OwnerMenuView />}
 
           {/* =================================================================
               TAB 4: CÀI ĐẶT (Thiết lập quán & QR)

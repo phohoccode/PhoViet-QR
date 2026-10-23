@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Sparkles, Coffee, AlertCircle, RefreshCw } from 'lucide-react';
+import { Search, Sparkles, Coffee, AlertCircle, RefreshCw, X } from 'lucide-react';
 import type { MenuCategory, MenuItem } from '../../../docs/contracts/types';
 import { CategoryChips } from './CategoryChips';
 import { MenuItemPreviewCard } from './MenuItemPreviewCard';
@@ -12,10 +12,24 @@ interface MenuPreviewSectionProps {
   isTableVerified?: boolean;
   isTakeaway?: boolean;
   isLoading?: boolean;
+  isMockPreview?: boolean;
   errorMessage?: string | null;
   onRetry?: () => void;
+  onItemClick?: (item: MenuItem) => void;
   onItemAdd?: (item: MenuItem) => void;
   className?: string;
+}
+
+/**
+ * Hàm chuẩn hóa loại bỏ dấu tiếng Việt để tìm kiếm không phân biệt hoa/thường và dấu
+ */
+function removeVietnameseDiacritics(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
 }
 
 /**
@@ -44,21 +58,28 @@ export const MenuPreviewSkeleton: React.FC = () => {
 };
 
 /**
- * EmptyMenuState — Khung rỗng khi danh mục chưa có món
+ * EmptyMenuState — Khung rỗng khi danh mục chưa có món hoặc tìm kiếm không thấy
  */
-export const EmptyMenuState: React.FC<{ onResetFilter?: () => void }> = ({ onResetFilter }) => {
+export const EmptyMenuState: React.FC<{ onResetFilter?: () => void; isSearch?: boolean }> = ({
+  onResetFilter,
+  isSearch,
+}) => {
   return (
     <div className="py-12 px-4 text-center text-[#727B77] bg-white rounded-2xl border border-[#E9ECEA] mx-4 my-2">
       <Coffee className="w-8 h-8 text-[#A0A8A5] mx-auto mb-2" aria-hidden="true" />
-      <p className="text-sm font-semibold text-[#1D2522]">Chưa có món ăn phù hợp</p>
+      <p className="text-sm font-semibold text-[#1D2522]">
+        {isSearch ? 'Không tìm thấy món phù hợp' : 'Chưa có món trong danh mục'}
+      </p>
       <p className="text-xs text-[#727B77] mt-1 max-w-xs mx-auto">
-        Không tìm thấy món ăn nào theo danh mục hoặc từ khóa tìm kiếm.
+        {isSearch
+          ? 'Vui lòng thử tìm với từ khóa khác hoặc xóa bộ lọc để xem toàn bộ thực đơn.'
+          : 'Danh mục này hiện chưa có món ăn nào đang phục vụ.'}
       </p>
       {onResetFilter && (
         <button
           type="button"
           onClick={onResetFilter}
-          className="mt-3 text-xs font-semibold text-[#1D725E] hover:underline"
+          className="mt-3 px-3 py-1.5 rounded-xl text-xs font-semibold text-[#1D725E] bg-[#E8F4F0] hover:bg-[#1D725E] hover:text-white transition-colors"
         >
           Xóa bộ lọc tìm kiếm
         </button>
@@ -97,7 +118,7 @@ export const MenuErrorState: React.FC<{ message?: string; onRetry?: () => void }
 
 /**
  * MenuPreviewSection — Vỏ khung xem trước thực đơn chuẩn hóa cho Phase 2 (P2-G01 & P2-G02).
- * Hỗ trợ tìm kiếm, lọc chip danh mục, thẻ món ăn mẫu và nhãn cảnh báo demo rõ ràng.
+ * Hỗ trợ tìm kiếm tiếng Việt chuẩn hóa, lọc chip danh mục, lọc inactive items, và xem chi tiết món.
  */
 export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
   categories,
@@ -105,8 +126,10 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
   isTableVerified = false,
   isTakeaway = false,
   isLoading = false,
+  isMockPreview = false,
   errorMessage = null,
   onRetry,
+  onItemClick,
   onItemAdd,
   className = '',
 }) => {
@@ -123,46 +146,79 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
     return <MenuErrorState message={errorMessage} onRetry={onRetry} />;
   }
 
-  // Lọc món theo danh mục và tìm kiếm cục bộ (chỉ phục vụ tương tác preview)
-  const filteredItems = items.filter((item) => {
+  // 1. Chỉ hiển thị các món đang active (nếu public API lỡ trả inactive do bug, UI lọc bỏ)
+  const activeItems = items.filter(
+    (item) => (item as unknown as { active?: boolean }).active !== false
+  );
+
+  // 2. Lọc món theo danh mục và tìm kiếm chuẩn hóa dấu tiếng Việt
+  const normalizedQuery = removeVietnameseDiacritics(searchQuery.trim());
+  const filteredItems = activeItems.filter((item) => {
     const matchesCategory =
       activeCategoryId === 'cat-all' || item.categoryId === activeCategoryId;
-    const matchesSearch =
-      searchQuery.trim() === '' ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+
+    if (!matchesCategory) return false;
+    if (!normalizedQuery) return true;
+
+    const normalizedName = removeVietnameseDiacritics(item.name);
+    const normalizedDesc = item.description ? removeVietnameseDiacritics(item.description) : '';
+    return normalizedName.includes(normalizedQuery) || normalizedDesc.includes(normalizedQuery);
   });
 
   const canAddToCart = isTakeaway || isTableVerified;
 
+  const handleClearSearch = () => {
+    setSearchQuery('');
+  };
+
+  const handleResetFilter = () => {
+    setSearchQuery('');
+    setActiveCategoryId('cat-all');
+  };
+
   return (
     <div className={`space-y-3 ${className}`}>
-      {/* 1. Dải thông báo Dev Preview minh bạch (Task C) */}
-      <div className="mx-4 px-3.5 py-2 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] flex items-center justify-between gap-2 text-xs text-[#727B77]">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Sparkles className="w-4 h-4 text-[#35977D] flex-shrink-0" aria-hidden="true" />
-          <span className="truncate">Thực đơn minh họa (Dev Preview P2-G01)</span>
+      {/* 1. Dải thông báo Preview nếu đang dùng mock fixtures */}
+      {isMockPreview && (
+        <div className="mx-4 px-3.5 py-2 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] flex items-center justify-between gap-2 text-xs text-[#727B77]">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <Sparkles className="w-4 h-4 text-[#35977D] flex-shrink-0" aria-hidden="true" />
+            <span className="truncate">Thực đơn minh họa (MOCK_PREVIEW)</span>
+          </div>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-[#E9ECEA] text-[#55605C] flex-shrink-0">
+            {activeItems.length} món
+          </span>
         </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-[#E9ECEA] text-[#55605C] flex-shrink-0">
-          {items.length} món mẫu
-        </span>
-      </div>
+      )}
 
-      {/* 2. Thanh tìm kiếm món */}
+      {/* 2. Thanh tìm kiếm món có nút Xóa tìm kiếm */}
       <div className="px-4">
+        <label htmlFor="customer-menu-search" className="sr-only">
+          Tìm món ăn hoặc thức uống
+        </label>
         <div className="relative">
           <Search
             className="w-4 h-4 text-[#727B77] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
             aria-hidden="true"
           />
           <input
+            id="customer-menu-search"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Tìm món ăn, thức uống..."
-            className="w-full h-11 pl-10 pr-4 bg-[#F7F8F7] border border-[#E9ECEA] rounded-xl text-sm text-[#1D2522] placeholder-[#727B77] focus:outline-none focus:ring-2 focus:ring-[#35977D] focus:bg-white transition-all"
-            aria-label="Tìm kiếm món trong thực đơn"
+            className="w-full h-11 pl-10 pr-10 bg-[#F7F8F7] border border-[#E9ECEA] rounded-xl text-sm text-[#1D2522] placeholder-[#727B77] focus:outline-none focus:ring-2 focus:ring-[#35977D] focus:bg-white transition-all"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="w-8 h-8 absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center text-[#727B77] hover:text-[#1D2522] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+              aria-label="Xóa tìm kiếm"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -190,14 +246,19 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
         </div>
 
         {filteredItems.length === 0 ? (
-          <EmptyMenuState onResetFilter={() => setSearchQuery('')} />
+          <EmptyMenuState
+            onResetFilter={handleResetFilter}
+            isSearch={Boolean(searchQuery || activeCategoryId !== 'cat-all')}
+          />
         ) : (
           <div className="flex flex-col gap-3">
             {filteredItems.map((item) => (
               <MenuItemPreviewCard
                 key={item.id}
                 item={item}
-                onAddClick={canAddToCart ? onItemAdd : undefined}
+                canAddToCart={canAddToCart}
+                onItemClick={onItemClick}
+                onAddClick={canAddToCart ? (onItemClick || onItemAdd) : undefined}
               />
             ))}
           </div>
@@ -206,3 +267,4 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
     </div>
   );
 };
+

@@ -1,5 +1,7 @@
 # UI data handoff — P0-C02
 
+**Delta P2-C02:** R03/R14/R15/R16 và category CRUD đã có backend local; xem [MENU_ADDENDUM](P2_C02_MENU_ADDENDUM.md) và [integration handoff](../integration/P2_C02_MENU_HANDOFF.md). Các dòng “chưa có API/category CRUD” bên dưới mô tả checkpoint P0, không thay trạng thái implementation mới. Không suy ra remote/UI/browser acceptance từ local tests.
+
 `contractVersion: v1-draft` · Cập nhật 23/10/2026 · Trạng thái: **READY cho mock UI theo draft; chưa có API runtime; production integration còn gate bên dưới**.
 
 Đọc API_CONTRACT_V1.md, types.ts, EXAMPLES.md và P0_C02_REVIEW.md theo bộ cùng version. JSON trong API là request/response đầy đủ đã gắn type, không dùng pseudo DTO trong P0-G01 làm schema production. Codex chỉ sửa `docs/contracts/**`; P0-G01 chỉ đọc. Gemini sở hữu presentation/mock trong phase được giao, không sửa contract/logic/FIFO.

@@ -207,14 +207,14 @@ def main() -> None:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".ts", prefix=".contract-check-", dir=ROOT, delete=False) as file:
             temporary = Path(file.name)
             file.write("\n".join(ts))
-        completed = subprocess.run([compiler, "--strict", "--noEmit", "--target", "ES2020", "--module", "ESNext", str(temporary)], capture_output=True, text=True, encoding="utf-8")
+        completed = subprocess.run([compiler, "--strict", "--noEmit", "--target", "ES2020", "--module", "ESNext", "--moduleResolution", "bundler", str(temporary)], capture_output=True, text=True, encoding="utf-8")
         assert completed.returncode == 0, completed.stdout + completed.stderr
     finally:
         if temporary:
             temporary.unlink(missing_ok=True)
     print(f"PASS: {len(original_blocks)} C01 + {len(api_blocks)} C02 typed JSON examples; strict TypeScript; 6 negative type checks; 21 route sections; {planned_cases} planned runtime cases.")
     print("PASS: ticket/state/money/scope references and private-only allowlisted demo credential fields.")
-    print("Static contract checks only. Backend authorization, webhook verification and concurrent DB races are not implemented/tested.")
+    print("Static contract checks only. Runtime implementation/verification is reported separately in docs/integration; this command does not verify backend authorization, webhook signatures or DB races.")
 
 
 if __name__ == "__main__":

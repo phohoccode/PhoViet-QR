@@ -16,6 +16,9 @@ import type {
   TableSummary,
   QRCodeView,
   OrderType,
+  OwnerMenuItem,
+  OwnerMenuView,
+  OwnerMenuCategory,
 } from '../../../docs/contracts/types';
 
 export const MOCK_STORE: StoreView = {
@@ -519,4 +522,117 @@ export const MOCK_QR_TAKEAWAY: import('../../../docs/contracts/types').QRResolut
  * (Trong production, mã này được cấp ngẫu nhiên từ server Codex qua POS)
  */
 export const DEMO_VALID_SESSION_CODES = ['8821', 'MOC88', 'TABLE05', '1234'];
+
+/* =============================================================================
+   MOCK FIXTURES CHO OWNER MENU TAB (PHASE 2 — P2-G02)
+   Tuân thủ 100% OwnerMenuView, OwnerMenuItem, OwnerMenuCategory từ docs/contracts/types.ts
+   ============================================================================= */
+
+export const MOCK_OWNER_CATEGORIES: OwnerMenuCategory[] = [
+  { id: 'cat-coffee', name: 'Cà phê', sortOrder: 1, active: true, updatedAt: '2026-10-23T07:00:00Z' },
+  { id: 'cat-tea', name: 'Trà trái cây', sortOrder: 2, active: true, updatedAt: '2026-10-23T07:00:00Z' },
+  { id: 'cat-milktea', name: 'Trà sữa', sortOrder: 3, active: true, updatedAt: '2026-10-23T07:00:00Z' },
+  { id: 'cat-bakery', name: 'Bánh ngọt', sortOrder: 4, active: true, updatedAt: '2026-10-23T07:00:00Z' },
+  { id: 'cat-seasonal', name: 'Món theo mùa', sortOrder: 5, active: false, updatedAt: '2026-10-23T07:00:00Z' },
+];
+
+export const MOCK_OWNER_MENU_ITEMS: OwnerMenuItem[] = [
+  {
+    id: 'item-01',
+    categoryId: 'cat-coffee',
+    name: 'Cà phê muối xứ Huế',
+    description: 'Robusta thơm đậm phối cùng lớp kem muối béo ngậy đặc trưng.',
+    priceVnd: 35000,
+    imageUrl: null,
+    available: true,
+    active: true,
+    options: [
+      { id: 'opt-01', name: 'Ít ngọt (50%)', priceDeltaVnd: 0, available: true },
+      { id: 'opt-02', name: 'Thêm kem muối', priceDeltaVnd: 8000, available: true },
+    ],
+    updatedAt: '2026-10-23T07:00:00Z',
+  },
+  {
+    id: 'item-02',
+    categoryId: 'cat-coffee',
+    name: 'Bạc xỉu ba tầng',
+    description: 'Sữa đặc, sữa tươi thanh trùng và cà phê pha phin truyền thống.',
+    priceVnd: 32000,
+    imageUrl: null,
+    available: true,
+    active: true,
+    options: [],
+    updatedAt: '2026-10-23T07:00:00Z',
+  },
+  {
+    id: 'item-03',
+    categoryId: 'cat-coffee',
+    name: 'Cà phê cốt dừa đá xay',
+    description: 'Cà phê đậm vị hòa quyện cốt dừa Bến Tre xay mịn mát lạnh.',
+    priceVnd: 45000,
+    imageUrl: null,
+    available: false, // Hết hàng minh họa
+    active: true,
+    options: [],
+    updatedAt: '2026-10-23T07:00:00Z',
+  },
+  {
+    id: 'item-04',
+    categoryId: 'cat-tea',
+    name: 'Trà đào cam sả',
+    description: 'Trà đen ủ lạnh với đào giòn, sả tươi và nước cam nguyên chất.',
+    priceVnd: 32000,
+    imageUrl: null,
+    available: true,
+    active: true,
+    options: [],
+    updatedAt: '2026-10-23T07:00:00Z',
+  },
+  {
+    id: 'item-05',
+    categoryId: 'cat-milktea',
+    name: 'Trà sữa trân châu hoàng kim',
+    description: 'Hồng trà Ceylon đậm đà kết hợp trân châu mật ong giòn dai.',
+    priceVnd: 42000,
+    imageUrl: null,
+    available: true,
+    active: true,
+    options: [
+      { id: 'opt-03', name: '50% đường, 70% đá', priceDeltaVnd: 0, available: true },
+    ],
+    updatedAt: '2026-10-23T07:00:00Z',
+  },
+  {
+    id: 'item-06',
+    categoryId: 'cat-bakery',
+    name: 'Bánh sừng bò phô mai',
+    description: 'Bánh ngàn lớp nướng giòn với nhân phô mai tan chảy.',
+    priceVnd: 38000,
+    imageUrl: null,
+    available: true,
+    active: true,
+    options: [],
+    updatedAt: '2026-10-23T07:00:00Z',
+  },
+  {
+    id: 'item-07',
+    categoryId: 'cat-coffee',
+    name: 'Cà phê ủ lạnh Cold Brew Cam',
+    description: 'Ủ lạnh 16 tiếng với hạt Arabica Cầu Đất, điểm xuyết lát cam sấy.',
+    priceVnd: 48000,
+    imageUrl: null,
+    available: true,
+    active: false, // Đã ẩn (inactive) minh họa
+    options: [],
+    updatedAt: '2026-10-23T07:00:00Z',
+  },
+];
+
+export const MOCK_OWNER_MENU_VIEW: OwnerMenuView = {
+  categories: MOCK_OWNER_CATEGORIES,
+  items: MOCK_OWNER_MENU_ITEMS,
+  menuRevision: 'rev-20261023-001',
+  serverTime: '2026-10-23T07:30:00Z',
+};
+
 
