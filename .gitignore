@@ -1,0 +1,32 @@
+# Dependencies / package-manager diagnostics
+/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Generated Next.js / TypeScript outputs
+/.next/
+/out/
+/build/
+/coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Local environment and private credentials (only the empty example is shared)
+.env*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.token
+credentials*.json
+service-account*.json
+/.secrets/
+/secrets/
+
+# Local editor / deployment files
+/.vercel/
+.DS_Store
+Thumbs.db

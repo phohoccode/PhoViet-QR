@@ -1,0 +1,107 @@
+/**
+ * DESIGN SYSTEM TOKENS — QR Ordering Minimal MVP
+ * Style direction: Minimal Emerald POS (khớp assets/ui-reference.png)
+ *
+ * Tương thích Tailwind CSS & shadcn/ui CSS theme variables.
+ */
+
+:root {
+  /* ==========================================================================
+     1. QR Ordering Core Brand & Surface Tokens (HEX & HSL)
+     ========================================================================== */
+  --qr-brand-accent: #35977d;         /* Emerald sáng: viền active, icon, điểm nhấn */
+  --qr-brand-strong: #1d725e;         /* Emerald đậm: Nút CTA chữ trắng (WCAG AA 5.2:1) */
+  --qr-brand-soft: #e8f4f0;           /* Nền xanh ngọc nhạt highlight, card active */
+  --qr-bg: #f5f6f5;                   /* Nền ngoài shell tổng thể */
+  --qr-surface: #ffffff;              /* Nền panel chính, card trắng */
+  --qr-surface-muted: #f7f8f7;        /* Nền thanh nav pill, ô input mềm */
+  --qr-border: #e9ecea;               /* Viền mỏng 1px tinh tế */
+  --qr-text: #1d2522;                 /* Chữ tiêu đề, giá tiền, số ticket */
+  --qr-text-muted: #727b77;           /* Chữ mô tả, thời gian, nhãn phụ */
+
+  /* ==========================================================================
+     2. shadcn/ui Theme Variables Mapping
+     ========================================================================== */
+  --background: 100 5% 96%;           /* #F5F6F5 */
+  --foreground: 153 12% 13%;          /* #1D2522 */
+
+  --card: 0 0% 100%;                  /* #FFFFFF */
+  --card-foreground: 153 12% 13%;     /* #1D2522 */
+
+  --popover: 0 0% 100%;               /* #FFFFFF */
+  --popover-foreground: 153 12% 13%;  /* #1D2522 */
+
+  --primary: 166 60% 28%;             /* #1D725E - CTA chính có tương phản cao */
+  --primary-foreground: 0 0% 100%;    /* #FFFFFF */
+
+  --secondary: 120 5% 97%;            /* #F7F8F7 */
+  --secondary-foreground: 153 12% 13%;/* #1D2522 */
+
+  --muted: 120 5% 97%;                /* #F7F8F7 */
+  --muted-foreground: 157 4% 46%;     /* #727B77 */
+
+  --accent: 160 33% 93%;              /* #E8F4F0 */
+  --accent-foreground: 166 60% 28%;   /* #1D725E */
+
+  --destructive: 4 86% 41%;           /* #B42318 */
+  --destructive-foreground: 0 0% 100%;/* #FFFFFF */
+
+  --border: 135 7% 92%;               /* #E9ECEA */
+  --input: 135 7% 92%;                /* #E9ECEA */
+  --ring: 164 48% 41%;                /* #35977D */
+
+  /* Radius tokens */
+  --radius-shell: 1.75rem;            /* 28px: Panel chính Owner */
+  --radius-card: 1rem;                /* 16px: Card món, Card đơn */
+  --radius-button: 0.75rem;           /* 12px: Nút bấm, Ô input */
+  --radius-pill: 9999px;              /* 9999px: Nav pill, Status badge */
+
+  /* ==========================================================================
+     3. Semantic Status Palette (Tách bạch hoàn toàn khỏi màu brand)
+     ========================================================================== */
+  --status-waiting-bg: #f1f3f2;
+  --status-waiting-fg: #55605c;
+  --status-waiting-border: #dde2e0;
+
+  --status-preparing-bg: #ebf3fb;
+  --status-preparing-fg: #1d528a;
+  --status-preparing-border: #cfe2f5;
+
+  --status-ready-bg: #e8f4f0;
+  --status-ready-fg: #165b4b;
+  --status-ready-border: #c6e7dc;
+
+  --status-pending-bg: #fef6ee;
+  --status-pending-fg: #8a4d00;
+  --status-pending-border: #f9dbaf;
+
+  --status-error-bg: #fef3f2;
+  --status-error-fg: #912018;
+  --status-error-border: #fecdca;
+}
+
+/* Base Utility Classes */
+.bg-qr-bg { background-color: var(--qr-bg); }
+.bg-qr-surface { background-color: var(--qr-surface); }
+.bg-qr-muted { background-color: var(--qr-surface-muted); }
+.bg-qr-brand { background-color: var(--qr-brand-accent); }
+.bg-qr-brand-strong { background-color: var(--qr-brand-strong); }
+.bg-qr-brand-soft { background-color: var(--qr-brand-soft); }
+
+.text-qr-primary { color: var(--qr-text); }
+.text-qr-muted { color: var(--qr-text-muted); }
+.text-qr-brand { color: var(--qr-brand-accent); }
+.text-qr-brand-strong { color: var(--qr-brand-strong); }
+
+.border-qr-border { border-color: var(--qr-border); }
+.border-qr-brand { border-color: var(--qr-brand-accent); }
+
+.shadow-shell {
+  box-shadow: 0 8px 30px -4px rgba(29, 37, 34, 0.08);
+}
+.shadow-card {
+  box-shadow: 0 2px 8px -2px rgba(29, 37, 34, 0.06), 0 1px 4px -1px rgba(29, 37, 34, 0.04);
+}
+.shadow-sticky {
+  box-shadow: 0 -4px 16px 0 rgba(29, 37, 34, 0.06);
+}
