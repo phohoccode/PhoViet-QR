@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import {
   Plus,
@@ -94,8 +94,9 @@ export const OwnerMenuView: React.FC = () => {
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState<boolean>(false);
   const [isCreatingNew, setIsCreatingNew] = useState<boolean>(false);
 
-  // Quick toggle mutating state
+  // Quick toggle mutating state & Idempotent request IDs (UI-02)
   const [mutatingItemId, setMutatingItemId] = useState<string | null>(null);
+  const toggleRequestIdsRef = useRef<Record<string, string>>({});
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
@@ -232,13 +233,22 @@ export const OwnerMenuView: React.FC = () => {
     const newAvailable = !item.available;
     setMutatingItemId(item.id);
 
+    // Giữ nguyên command requestId qua retry / timeout (UI-02)
+    if (!toggleRequestIdsRef.current[item.id]) {
+      toggleRequestIdsRef.current[item.id] = crypto.randomUUID();
+    }
+    const requestId = toggleRequestIdsRef.current[item.id];
+
     try {
       // Gọi mutation PATCH R16 trực tiếp, giữ nguyên expectedUpdatedAt từ server
       const updated = await updateMenuItem(item.id, {
-        requestId: crypto.randomUUID(),
+        requestId,
         expectedUpdatedAt: item.updatedAt,
         available: newAvailable,
       });
+
+      // Thành công -> xóa requestId chờ
+      delete toggleRequestIdsRef.current[item.id];
 
       // Chỉ cập nhật trạng thái switch khi server xác nhận thành công
       setItems((prev) => prev.map((it) => (it.id === item.id ? updated : it)));
@@ -249,18 +259,21 @@ export const OwnerMenuView: React.FC = () => {
     } catch (err: unknown) {
       if (err instanceof MenuApiError && err.status === 409) {
         // CAS conflict: nạp lại menu mới nhất từ server
+        delete toggleRequestIdsRef.current[item.id];
         loadMenu();
         setNotification({
           type: 'error',
           message: 'Dữ liệu món đã được cập nhật bởi phiên làm việc khác (CAS stale). Đang làm mới...',
         });
       } else if (err instanceof MenuApiError) {
+        delete toggleRequestIdsRef.current[item.id];
         setNotification({
           type: 'error',
           message: err.error.message || `Không thể đổi trạng thái món "${item.name}".`,
         });
       } else if (isDev) {
         // Mock fallback chỉ trong môi trường dev
+        delete toggleRequestIdsRef.current[item.id];
         setItems((prev) =>
           prev.map((it) => (it.id === item.id ? { ...it, available: newAvailable } : it))
         );
@@ -269,9 +282,10 @@ export const OwnerMenuView: React.FC = () => {
           message: `Đã đổi trạng thái "${item.name}" (chế độ Mock Preview Dev).`,
         });
       } else {
+        // Lỗi mạng: Giữ lại requestId để khi người dùng click lại sẽ replay cùng key (UI-02)
         setNotification({
           type: 'error',
-          message: `Lỗi kết nối máy chủ khi cập nhật "${item.name}".`,
+          message: `Lỗi kết nối máy chủ khi cập nhật "${item.name}". Vui lòng thử lại.`,
         });
       }
     } finally {

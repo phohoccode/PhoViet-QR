@@ -24,6 +24,7 @@ export type OwnerTabState = 'ready' | 'loading' | 'empty' | 'error';
 
 export interface OwnerShellProps {
   storeName: string;
+  acceptingOrders?: boolean;
   orders: OrderDetail[];
   tables?: (OwnerTable | TableSummary)[];
   menuItems?: MenuItem[];
@@ -63,6 +64,7 @@ function toOwnerTables(items: (TableSummary | OwnerTable)[]): OwnerTable[] {
  */
 export const OwnerShell: React.FC<OwnerShellProps> = ({
   storeName,
+  acceptingOrders = true,
   orders,
   tables = [],
   initialTab = 'orders',
@@ -174,9 +176,9 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
     }
   }, [tables, onRetryTables]);
 
-  // Tự động tải dữ liệu khi chuyển sang tab bàn không gây cascading render
+  // Tự động tải dữ liệu khi chuyển sang tab bàn hoặc cài đặt (UI-01)
   useEffect(() => {
-    if (activeTab !== 'tables') return;
+    if (activeTab !== 'tables' && activeTab !== 'settings') return;
 
     let isCancelled = false;
 
@@ -402,8 +404,8 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
                   <div className="flex-1 overflow-y-auto pr-1">
                     {filteredOrders.length === 0 ? (
                       <OwnerEmptyState
-                        title="Không có đơn hàng nào"
-                        description="Hàng đợi hiện đang trống hoặc không có đơn phù hợp với bộ lọc."
+                        title="Chưa có đơn hàng trong ca"
+                        description="Hàng đợi đơn hàng thời gian thực và điều phối chế biến (FIFO) sẽ được kích hoạt ở Phase 3 khi kết nối API đặt món. Đơn gọi món từ khách quét QR sẽ tự động hiển thị tại đây."
                       />
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -524,23 +526,34 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
               TAB 4: CÀI ĐẶT (Thiết lập quán & QR Mua mang đi tại quầy)
              ================================================================= */}
           {activeTab === 'settings' && (
-            <div className="flex-1 max-w-2xl mx-auto w-full py-4 space-y-4">
+            <div className="flex-1 max-w-3xl mx-auto w-full py-4 space-y-4">
               <div className="p-4 bg-white rounded-2xl border border-[#E9ECEA] shadow-xs">
-                <h4 className="text-sm font-bold text-[#1D2522] mb-1">
-                  1. Trạng thái nhận đơn của quán
-                </h4>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h4 className="text-sm font-bold text-[#1D2522]">
+                    1. Trạng thái nhận đơn của quán
+                  </h4>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F1F3F2] text-[#727B77]">
+                    Thiết lập ở Phase 4
+                  </span>
+                </div>
                 <p className="text-xs text-[#727B77] mb-3">
-                  Khi tạm ngừng, khách quét QR chỉ có thể xem menu mà không thể gửi đơn mới.
+                  Cấu hình bật/tắt nhận đơn trực tiếp qua API R19/R20 (Store Settings) sẽ được kết nối ở Phase 4. Hiện hiển thị theo trạng thái snapshot thực tế của quán.
                 </p>
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#E8F4F0] text-[#1D725E] text-xs font-bold border border-[#C6E7DC]">
-                  <span>🟢 Đang mở cửa nhận đơn</span>
+                <div
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border ${
+                    acceptingOrders !== false
+                      ? 'bg-[#E8F4F0] text-[#1D725E] border-[#C6E7DC]'
+                      : 'bg-[#FEF3F2] text-[#B42318] border-[#FECDCA]'
+                  }`}
+                >
+                  <span>{acceptingOrders !== false ? '🟢 Đang mở cửa nhận đơn' : '🔴 Đang tạm ngừng nhận đơn'}</span>
                 </div>
               </div>
 
-              {/* CARD 2: QR Mua mang đi tại quầy (P2-G04) */}
+              {/* CARD 2: QR Mua mang đi tại quầy (P2-G04, lọc chính xác mã active chưa thu hồi theo UI-01) */}
               <TakeawayQrCard
                 storeName={storeName}
-                initialQrCode={qrCodesList.find((q) => q.type === 'takeaway')}
+                initialQrCode={qrCodesList.find((q) => q.type === 'takeaway' && q.active && !q.retiredAt)}
                 onQrUpdated={(updatedQr) => {
                   setQrCodesList((prev) => {
                     const filtered = prev.filter((q) => q.type !== 'takeaway');
@@ -550,16 +563,18 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
                 }}
               />
 
-              <div className="p-4 bg-white rounded-2xl border border-[#E9ECEA] shadow-xs">
-                <h4 className="text-sm font-bold text-[#1D2522] mb-1">
-                  3. Cổng thanh toán VietQR
-                </h4>
-                <p className="text-xs text-[#727B77] mb-2">
-                  Trạng thái tích hợp tự động qua Webhook (không hiển thị secret keys).
+              <div className="p-4 bg-white rounded-2xl border border-[#E9ECEA] shadow-xs opacity-90">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h4 className="text-sm font-bold text-[#1D2522]">
+                    3. Cổng thanh toán VietQR (Phase 4)
+                  </h4>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F1F3F2] text-[#727B77]">
+                    Thiết lập ở giai đoạn sau
+                  </span>
+                </div>
+                <p className="text-xs text-[#727B77]">
+                  Cấu hình tài khoản ngân hàng và đối soát thanh toán tự động qua Webhook sẽ được triển khai ở Phase 4. Hiện không lưu cấu hình giả lập.
                 </p>
-                <span className="text-xs text-[#165B4B] font-semibold bg-[#E8F4F0] border border-[#C6E7DC] px-2.5 py-1 rounded-lg inline-block">
-                  🟢 Webhook đang hoạt động ổn định
-                </span>
               </div>
             </div>
           )}

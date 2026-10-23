@@ -1,6 +1,6 @@
 import type { QRResolution, MenuV1View } from "@contracts";
 import { publicQrCode } from "@/lib/validations/table-sessions";
-import { menuRequest, fetchPublicMenu, MenuApiError } from "@/features/customer/api-client";
+import { fetchQrResolution, fetchPublicMenu, MenuApiError } from "@/features/customer/api-client";
 import { browserCartStorage, readCart, writeCart, type CartStorage } from "./storage";
 import { cartIssue, cartReducer, cartScopeKey, getCartView, getCheckoutReadiness, initialCartState, prepareOrderDraft } from "./domain";
 import type { AddCartLineInput, CartAction, CartIssue, CartResult, CartState, CartLoadError } from "./types";
@@ -14,7 +14,7 @@ export interface CartStoreOptions {
 }
 export function createCartStore(options: CartStoreOptions) {
   const qrCode = publicQrCode.parse(options.qrCode);
-  const loadResolution = options.loadResolution ?? (code => menuRequest<QRResolution>(`/api/public/qr/${encodeURIComponent(code)}`));
+  const loadResolution = options.loadResolution ?? fetchQrResolution;
   const loadMenu = options.loadMenu ?? fetchPublicMenu;
   let state = initialCartState(), requestVersion = 0, storage: CartStorage | null = null, disposed = false, loadedScope: string | null = null;
   let inFlight: { version: number; promise: Promise<CartResult> } | null = null;

@@ -1,6 +1,4 @@
-'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Download,
@@ -12,6 +10,7 @@ import {
   ShieldAlert,
   Loader2,
   ChevronDown,
+  QrCode,
 } from 'lucide-react';
 import type { OwnerTable, OwnerQrCode } from '@/types/contracts/table-qr';
 import { rotateOwnerQrCode, MenuApiError } from '@/features/owner/api-client';
@@ -35,7 +34,8 @@ export interface TableQrModalProps {
 
 /**
  * TableQrModal — Dialog xem, tải, in và quản lý vòng đời QR của một bàn.
- * - Sử dụng publicUrl trực tiếp do server trả về (chuẩn P2-C04), không tự ghép browser origin.
+ * - Sử dụng publicUrl trực tiếp do server trả về (chuẩn P2-C04), không tự ghép browser origin hay ID bàn.
+ * - Giữ nguyên requestId qua các lần retry để bảo đảm tính idempotent replay (UI-02).
  * - Hỗ trợ tải file SVG vector sắc nét hoặc PNG 1024px chất lượng cao.
  * - Hỗ trợ in phiếu dán bàn chuẩn A6/A7 cách ly qua print stylesheet.
  * - Đổi mã QR (rotate) an toàn qua POST /api/owner/qr-codes/:id/rotate với confirm:true và expectedUpdatedAt.
@@ -61,6 +61,13 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
   const [isPrinting, setIsPrinting] = useState(false);
   const [justRotated, setJustRotated] = useState(false);
 
+  // Idempotent Request ID cho thao tác rotate (UI-02)
+  const rotateRequestIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    rotateRequestIdRef.current = null;
+  }, [table.id]);
+
   if (table.id !== prevTableId) {
     setPrevTableId(table.id);
     setOverrideQr(null);
@@ -71,12 +78,11 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Ưu tiên tuyệt đối qr.publicUrl do server trả về theo yêu cầu P2-C04
-  const fullPublicUrl =
-    currentQr?.publicUrl ||
-    (typeof window !== 'undefined'
-      ? `${window.location.origin}${currentQr?.path || `/q/${table.id.replace(/[^a-zA-Z0-9]/g, '_')}`}`
-      : '');
+  // UI-03: Chỉ coi là URL hợp lệ khi có publicUrl thật từ server và QR đang active, chưa thu hồi
+  const isValidPublicUrl = Boolean(
+    currentQr && currentQr.publicUrl && currentQr.active && !currentQr.retiredAt
+  );
+  const fullPublicUrl = isValidPublicUrl ? currentQr!.publicUrl : '';
   const filenameBase = `QR_${table.label.replace(/\s+/g, '_')}`;
 
   // Kiểm tra phiên hoạt động
@@ -84,6 +90,7 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
 
   // Xử lý sao chép link
   const handleCopyLink = async () => {
+    if (!isValidPublicUrl) return;
     try {
       await navigator.clipboard.writeText(fullPublicUrl);
       setCopiedLink(true);
@@ -95,6 +102,7 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
 
   // Tải SVG
   const handleDownloadSvg = () => {
+    if (!isValidPublicUrl) return;
     try {
       const matrix = generateQrMatrix(fullPublicUrl);
       const svg = matrixToSvg(matrix, {
@@ -111,6 +119,7 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
 
   // Tải PNG
   const handleDownloadPng = async () => {
+    if (!isValidPublicUrl) return;
     try {
       const matrix = generateQrMatrix(fullPublicUrl);
       await downloadPngFromMatrix(matrix, filenameBase, 1024, 4);
@@ -121,6 +130,7 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
 
   // Xử lý In
   const handlePrint = () => {
+    if (!isValidPublicUrl) return;
     setIsPrinting(true);
     setTimeout(() => {
       window.print();
@@ -146,7 +156,10 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
     setIsRotating(true);
     setRotateError(null);
 
-    const requestId = crypto.randomUUID();
+    if (!rotateRequestIdRef.current) {
+      rotateRequestIdRef.current = crypto.randomUUID();
+    }
+    const requestId = rotateRequestIdRef.current;
 
     try {
       const newQrData = await rotateOwnerQrCode(currentQr.id, {
@@ -155,6 +168,8 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
         requestId,
       });
 
+      // Thành công -> xóa requestId chờ
+      rotateRequestIdRef.current = null;
       setOverrideQr(newQrData);
       setJustRotated(true);
       setShowRotateConfirm(false);
@@ -165,27 +180,31 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
         const code = err.error.code;
 
         if (code === 'INVALID_STATE_TRANSITION' && field === 'activeSession') {
+          rotateRequestIdRef.current = null;
           setRotateError(
             'Đổi mã QR bị chặn vì bàn đang có phiên hoạt động hoặc chờ thanh toán.'
           );
         } else if (code === 'INVALID_STATE_TRANSITION' && field === 'expectedUpdatedAt') {
+          rotateRequestIdRef.current = null;
           setRotateError(
             'Mã QR đã được cập nhật bởi một thao tác khác. Vui lòng tải lại trang.'
           );
         } else if (code === 'INVALID_STATE_TRANSITION' && (field === 'rotation' || field === 'retiredQr')) {
-          setRotateError('Mã QR không hợp lệ hoặc đã bị vô hiệu hóa.');
-        } else if (code === 'RATE_LIMITED') {
-          setRotateError('Thao tác quá nhanh. Vui lòng chờ vài giây rồi thử lại.');
+          rotateRequestIdRef.current = null;
+          setRotateError(
+            'Mã QR hiện tại không hợp lệ hoặc đã ngừng hoạt động để đổi mã.'
+          );
         } else {
-          setRotateError(err.error.message || 'Không thể đổi mã QR.');
+          setRotateError(err.error.message || 'Không thể đổi mã QR của bàn này.');
         }
       } else {
-        setRotateError('Lỗi mạng khi gửi yêu cầu đổi mã QR. Vui lòng thử lại.');
+        setRotateError('Lỗi mạng khi yêu cầu đổi mã QR bàn. Bấm thử lại để gửi lại yêu cầu.');
       }
     } finally {
       setIsRotating(false);
     }
   };
+
 
   return (
     <>
@@ -271,40 +290,52 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
             )}
 
             {/* QR Code trung tâm */}
-            <div className="flex flex-col items-center justify-center p-4 bg-[#F7F8F7] rounded-2xl border border-[#E9ECEA]">
-              <QrCodeView
-                value={fullPublicUrl}
-                size={210}
-                margin={4}
-                fgColor="#1D2522"
-                bgColor="#FFFFFF"
-                className="shadow-sm"
-              />
-
-              <div className="mt-3 w-full flex items-center justify-between gap-2 p-2 bg-white rounded-xl border border-[#E9ECEA] text-xs">
-                <span className="font-mono text-[#727B77] truncate select-all">
-                  {fullPublicUrl}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="shrink-0 p-1.5 rounded-lg hover:bg-[#F7F8F7] text-[#1D725E] font-semibold flex items-center gap-1 transition-colors"
-                  title="Sao chép liên kết"
-                >
-                  {copiedLink ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-[#1D725E]" aria-hidden="true" />
-                      <span className="text-[11px]">Đã chép</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span className="text-[11px]">Chép link</span>
-                    </>
-                  )}
-                </button>
+            {!isValidPublicUrl ? (
+              <div className="flex flex-col items-center justify-center p-8 bg-[#F7F8F7] rounded-2xl border border-dashed border-[#E9ECEA] text-center space-y-2">
+                <QrCode className="w-12 h-12 text-[#A0AAA5]" aria-hidden="true" />
+                <p className="text-xs font-bold text-[#1D2522]">
+                  Bàn chưa có mã QR công khai từ máy chủ
+                </p>
+                <p className="text-[11px] text-[#727B77]">
+                  Mã QR có thể đã bị khóa hoặc thu hồi. Vui lòng kiểm tra lại cấu hình bàn.
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center p-4 bg-[#F7F8F7] rounded-2xl border border-[#E9ECEA]">
+                <QrCodeView
+                  value={fullPublicUrl}
+                  size={210}
+                  margin={4}
+                  fgColor="#1D2522"
+                  bgColor="#FFFFFF"
+                  className="shadow-sm"
+                />
+
+                <div className="mt-3 w-full flex items-center justify-between gap-2 p-2 bg-white rounded-xl border border-[#E9ECEA] text-xs min-w-0 overflow-hidden">
+                  <span className="font-mono text-[#727B77] truncate select-all flex-1 min-w-0">
+                    {fullPublicUrl}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="shrink-0 p-1.5 rounded-lg hover:bg-[#F7F8F7] text-[#1D725E] font-semibold flex items-center gap-1 transition-colors"
+                    title="Sao chép liên kết"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-[#1D725E]" aria-hidden="true" />
+                        <span className="text-[11px]">Đã chép</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span className="text-[11px]">Chép link</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Cảnh báo bảo mật phiên bàn */}
             <div className="p-3 bg-[#FAFBFB] border border-[#E9ECEA] rounded-xl text-xs text-[#55605C] flex items-start gap-2.5">
@@ -319,24 +350,27 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
+                disabled={!isValidPublicUrl}
                 onClick={handleDownloadSvg}
-                className="h-11 px-3 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-[#1D2522] text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs hover:border-[#35977D]"
+                className="h-11 px-3 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-[#1D2522] text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs hover:border-[#35977D] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="w-3.5 h-3.5 text-[#35977D]" aria-hidden="true" />
                 <span>Tải SVG</span>
               </button>
               <button
                 type="button"
+                disabled={!isValidPublicUrl}
                 onClick={handleDownloadPng}
-                className="h-11 px-3 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-[#1D2522] text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs hover:border-[#35977D]"
+                className="h-11 px-3 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-[#1D2522] text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs hover:border-[#35977D] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="w-3.5 h-3.5 text-[#35977D]" aria-hidden="true" />
                 <span>Tải PNG</span>
               </button>
               <button
                 type="button"
+                disabled={!isValidPublicUrl}
                 onClick={handlePrint}
-                className="h-11 px-3 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
+                className="h-11 px-3 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Printer className="w-4 h-4" aria-hidden="true" />
                 <span>{isPrinting ? 'Đang mở in...' : 'In phiếu QR'}</span>

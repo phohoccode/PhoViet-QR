@@ -65,7 +65,7 @@ export const EmptyMenuState: React.FC<{ onResetFilter?: () => void; isSearch?: b
   isSearch,
 }) => {
   return (
-    <div className="py-12 px-4 text-center text-[#727B77] bg-white rounded-2xl border border-[#E9ECEA] mx-4 my-2">
+    <div className="py-12 px-4 text-center text-[#727B77] bg-white rounded-2xl border border-[#E9ECEA] my-2">
       <Coffee className="w-8 h-8 text-[#A0A8A5] mx-auto mb-2" aria-hidden="true" />
       <p className="text-sm font-semibold text-[#1D2522]">
         {isSearch ? 'Không tìm thấy món phù hợp' : 'Chưa có món trong danh mục'}

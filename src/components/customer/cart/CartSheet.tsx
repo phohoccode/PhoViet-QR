@@ -209,6 +209,25 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               </div>
             )}
 
+            {/* Cảnh báo phiên bàn thay đổi (Cross-QR / Context change) */}
+            {readiness.contextChanged && (
+              <div className="px-4 py-2.5 bg-[#FFFAEB] border-b border-[#FEDF89] text-xs text-[#B54708] flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 text-[#B54708]" aria-hidden="true" />
+                  <span>Phiên bàn đã thay đổi. Vui lòng xác nhận giỏ hàng.</span>
+                </div>
+                {cartActions.confirmContextChange && (
+                  <button
+                    type="button"
+                    onClick={() => cartActions.confirmContextChange?.()}
+                    className="text-xs font-bold text-[#B54708] underline hover:text-[#93370D]"
+                  >
+                    Cập nhật
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Cảnh báo bàn chưa xác nhận trong chế độ Dine-in */}
             {!isTakeaway && !isTableVerified && items.length > 0 && (
               <div className="px-4 py-2.5 bg-[#FEF6EE] border-b border-[#F9DBAF] text-xs text-[#8A4D00] flex items-center justify-between gap-2">

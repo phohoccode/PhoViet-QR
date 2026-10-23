@@ -20,6 +20,8 @@ PostgreSQL giữ CRLF bên trong dollar-quoted literal. `pg_get_functiondef()` k
 
 `supabase/diagnostics/p2_c04_resolver_preflight.sql` đã đổi sang **một JSON duy nhất** vì SQL Editor chỉ hiện result set cuối trong lần chạy trước. Chạy nguyên file ở đúng project, Export → JSON và gửi kết quả để đối chiếu. Script dùng READ ONLY + ROLLBACK, không gọi resolver/RPC, không đọc mã phiên, artifact, cookie hay code_hash của bản ghi.
 
+Cập nhật23/10/2026: người dùng trả lời **“đã ok r”** sau yêu cầu gửi JSON. Ghi nhận người dùng báo vấn đề đã xử lý; chưa có JSON/function definition bổ sung để xác minh độc lập. Không tiếp tục yêu cầu phản hồi như một điều kiện chặn công việc audit local, không tự áp dụng thay đổi Production và không đổi kết luận nguyên nhân Production thành đã xác nhận. Kết quả gate tổng hợp ở [P2-C05 readiness](P2_C05_CODEX_READINESS.md).
+
 ## So sánh Local với nền tảng
 
 Checksum dưới đây là MD5 của **prosrc đã đổi CRLF thành LF**, không phải checksum toàn bộ `pg_get_functiondef` (header có thể được PostgreSQL định dạng lại).

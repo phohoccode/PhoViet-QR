@@ -71,6 +71,16 @@ try{
  assert(!JSON.stringify(publicA).match(/storeId|ownerId|codeHash|tokenHash|session|active/));
  const resolutionA=await ok(`/api/public/qr/${codes[0]}`,guest),resolutionB=await ok(`/api/public/qr/${codes[1]}`,guest);
  assert.equal(resolutionA.mode,"dine_in");assert.equal(resolutionB.mode,"takeaway");
+ // An already bootstrapped browser avoids first-cookie races. Forty concurrent
+ // public reads, ten per path/code pair, stay below the documented bucket caps.
+ const burst=await Promise.all(Array.from({length:40},async(_,index)=>{
+  const code=codes[index%2],path=index%4<2?`/api/public/menu?qrCode=${code}`:`/api/public/qr/${code}`;
+  const started=performance.now();const r=await call(path,guest);const json=await r.json();
+  assert.equal(r.status,200);assert.equal(json.error,null);assert(json.data);
+  return performance.now()-started;
+ }));
+ burst.sort((a,b)=>a-b);
+ console.log(`PASS public QR/menu burst: concurrent=40 errors=0 p50=${Math.round(burst[19])}ms p95=${Math.round(burst[37])}ms (local smoke only)`);
  const before=item.updatedAt,patch={requestId:randomUUID(),expectedUpdatedAt:before,priceVnd:31000,available:false};
  item=await ok(`/api/owner/menu/${item.id}`,owners[0],"PATCH",patch);
  assert.deepEqual(await ok(`/api/owner/menu/${item.id}`,owners[0],"PATCH",patch),item);

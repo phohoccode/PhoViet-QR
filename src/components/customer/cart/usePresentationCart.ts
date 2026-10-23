@@ -18,7 +18,6 @@ import type { MenuItem } from '../../../../docs/contracts/types';
 import {
   createCartStore,
   useCart,
-  lineKeyFor,
   type CartStore,
   type CartResult,
   type AddCartLineInput,
@@ -253,42 +252,47 @@ export function usePresentationCart({
         };
       }
 
-      let currentKey = lineId;
-
-      // 1. Cập nhật options nếu có thay đổi
       const optIdsSorted = [...updates.optionIds].sort();
       const existingOptIdsSorted = [...existing.optionIds].sort();
       const optionsChanged =
         JSON.stringify(optIdsSorted) !== JSON.stringify(existingOptIdsSorted);
+      const targetNote =
+        updates.note !== undefined ? (updates.note.trim() || null) : existing.note;
+      const noteChanged = targetNote !== existing.note;
+      const targetQuantity =
+        updates.quantity !== undefined ? updates.quantity : existing.quantity;
 
-      if (optionsChanged) {
-        const optRes = cart.updateOptions(currentKey, updates.optionIds);
-        if (!optRes.ok) return optRes;
-        currentKey = existing.noteNeedsReview
-          ? existing.lineKey
-          : lineKeyFor({
-              menuItemId: existing.menuItemId,
-              optionIds: updates.optionIds,
-              note: existing.note,
-            });
+      // Nếu không đổi options và không đổi note (và không cần review note):
+      // Chỉ cập nhật số lượng trực tiếp trên dòng hiện tại
+      if (!optionsChanged && !noteChanged && !existing.noteNeedsReview) {
+        if (targetQuantity !== existing.quantity) {
+          return cart.updateQuantity(lineId, targetQuantity);
+        }
+        return { ok: true, value: undefined };
       }
 
-      // 2. Cập nhật note nếu có thay đổi hoặc đang cần review
-      const noteVal = updates.note ? updates.note.trim() : null;
-      if (noteVal !== existing.note || existing.noteNeedsReview) {
-        const noteRes = cart.updateNote(currentKey, noteVal);
-        if (!noteRes.ok) return noteRes;
-        currentKey = lineKeyFor({
+      // Xử lý chỉnh sửa nguyên tử (atomic edit) để bảo toàn ngữ nghĩa gộp (merge semantics) của domain:
+      // Tách dòng cũ ra trước, sau đó addLine với options, note và quantity mục tiêu.
+      // Nếu trùng với dòng khác đã có trong giỏ, addLine sẽ tự động gộp (ví dụ: B=2 + A=3 -> B=5).
+      const removeRes = cart.removeLine(lineId);
+      if (!removeRes.ok) return removeRes;
+
+      const addRes = cart.addLine({
+        menuItemId: existing.menuItemId,
+        optionIds: updates.optionIds,
+        note: targetNote,
+        quantity: targetQuantity,
+      });
+
+      if (!addRes.ok) {
+        // Rollback hoàn tác lại dòng ban đầu nếu addLine thất bại (ví dụ: vượt giới hạn giỏ)
+        cart.addLine({
           menuItemId: existing.menuItemId,
-          optionIds: updates.optionIds || existing.optionIds,
-          note: noteVal,
+          optionIds: existing.optionIds,
+          note: existing.note,
+          quantity: existing.quantity,
         });
-      }
-
-      // 3. Cập nhật quantity nếu có thay đổi
-      if (updates.quantity !== undefined && updates.quantity !== existing.quantity) {
-        const qtyRes = cart.updateQuantity(currentKey, updates.quantity);
-        if (!qtyRes.ok) return qtyRes;
+        return addRes;
       }
 
       return { ok: true, value: undefined };

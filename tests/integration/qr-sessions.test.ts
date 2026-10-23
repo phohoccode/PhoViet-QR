@@ -105,6 +105,9 @@ describe("real local QR/session/guest database", () => {
     for (let i=0;i<5;i++) await expect(verifyTableSession(qr[0], "wrong", attacker)).rejects.toMatchObject({ code: "INVALID_SESSION_CODE" });
     await expect(verifyTableSession(qr[0], "wrong", attacker)).rejects.toMatchObject({ code: "RATE_LIMITED", details: { retryAfterSeconds: expect.any(Number) } });
     expect(await verifyTableSession(qr[0], opened.sessionCredential.sessionCode, { ...deviceA, ipHash: attacker.ipHash })).toMatchObject({ requiresSessionCode: false, session: { id: opened.session.id } });
+    // Move only this random fixture's bucket deadline; avoid a minute-long wait.
+    sql(`update public.security_rate_buckets set resets_at=clock_timestamp()-interval '1 second' where key_hash=encode(extensions.digest('verify:${attacker.browserHash}:'||(select id from public.qr_codes where public_code='${qr[0]}'),'sha256'),'hex')`);
+    expect(await verifyTableSession(qr[0], opened.sessionCredential.sessionCode, attacker)).toMatchObject({ requiresSessionCode: false, session: { id: opened.session.id } });
   });
   it("issues independent grants to multiple devices and prevents cross-table access", async () => {
     await verifyTableSession(qr[0], opened.sessionCredential.sessionCode, deviceB);

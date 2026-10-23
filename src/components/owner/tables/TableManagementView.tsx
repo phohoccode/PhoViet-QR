@@ -1,6 +1,4 @@
-'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Plus,
   RefreshCw,
@@ -16,7 +14,11 @@ import type {
   OwnerSessionOpenedView,
 } from '../../../../docs/contracts/types';
 import type { OwnerTable, OwnerQrCode } from '@/types/contracts/table-qr';
-import { updateOwnerTable, MenuApiError } from '@/features/owner/api-client';
+import {
+  openOwnerTableSession,
+  updateOwnerTable,
+  MenuApiError,
+} from '@/features/owner/api-client';
 import { AddEditTableDialog } from './AddEditTableDialog';
 import { TableQrModal } from './TableQrModal';
 import { TableSessionOpenedDialog, TableDetailDialog } from '../TableSessionDialog';
@@ -73,6 +75,10 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
   const [togglingTableId, setTogglingTableId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // Idempotent Request IDs qua các lần retry (UI-02)
+  const pendingOpenSessionRequestIdsRef = useRef<Record<string, string>>({});
+  const pendingToggleRequestIdsRef = useRef<Record<string, string>>({});
+
   // Lọc bàn
   const filteredTables = tables.filter((t) => {
     const matchesSearch = t.label.toLowerCase().includes(searchQuery.toLowerCase().trim());
@@ -85,57 +91,53 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
     return true;
   });
 
-  // Gọi R12 POST /api/owner/tables/:id/sessions để mở phiên bàn mới
+  // Gọi R12 POST /api/owner/tables/:id/sessions để mở phiên bàn mới bằng typed client
   const handleOpenTableSession = async (table: OwnerTable) => {
     setOpeningTableId(table.id);
     setOpenSessionError(null);
     setActionError(null);
 
-    const requestId = crypto.randomUUID();
+    // Giữ nguyên command requestId qua retry / timeout (UI-02)
+    if (!pendingOpenSessionRequestIdsRef.current[table.id]) {
+      pendingOpenSessionRequestIdsRef.current[table.id] = crypto.randomUUID();
+    }
+    const requestId = pendingOpenSessionRequestIdsRef.current[table.id];
 
     try {
-      const res = await fetch(`/api/owner/tables/${table.id}/sessions`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ requestId }),
+      const opened = await openOwnerTableSession(table.id, { requestId });
+
+      // Thành công -> xóa requestId chờ
+      delete pendingOpenSessionRequestIdsRef.current[table.id];
+
+      // Cập nhật lại table state
+      onTableUpdated?.({
+        ...table,
+        session: opened.session,
       });
 
-      if (res.status === 201) {
-        const json = await res.json();
-        const opened: OwnerSessionOpenedView = json.data;
-
-        // Cập nhật lại table state
-        onTableUpdated?.({
-          ...table,
-          session: opened.session,
+      setOpenedSessionView(opened);
+    } catch (err: unknown) {
+      if (err instanceof MenuApiError) {
+        if (err.status === 409) {
+          delete pendingOpenSessionRequestIdsRef.current[table.id];
+          setOpenSessionError({
+            tableId: table.id,
+            message: 'Bàn đã có phiên đang mở hoặc xung đột yêu cầu.',
+          });
+          onRefresh?.();
+          return;
+        }
+        setOpenSessionError({
+          tableId: table.id,
+          message: err.error.message || 'Không thể mở phiên bàn.',
         });
-
-        setOpenedSessionView(opened);
-        return;
+      } else {
+        // Giữ lại requestId khi lỗi mạng để thử lại an toàn (UI-02)
+        setOpenSessionError({
+          tableId: table.id,
+          message: 'Lỗi mạng khi mở phiên bàn. Vui lòng bấm thử lại.',
+        });
       }
-
-      let errorMsg = 'Không thể mở phiên bàn.';
-      try {
-        const errJson = await res.json();
-        errorMsg = errJson?.error?.message || errorMsg;
-      } catch {
-        // Non-JSON
-      }
-
-      if (res.status === 409) {
-        errorMsg = 'Bàn đã có phiên đang mở hoặc xung đột yêu cầu.';
-        onRefresh?.();
-      }
-
-      setOpenSessionError({ tableId: table.id, message: errorMsg });
-    } catch {
-      setOpenSessionError({
-        tableId: table.id,
-        message: 'Lỗi mạng khi mở phiên bàn. Vui lòng thử lại.',
-      });
     } finally {
       setOpeningTableId(null);
     }
@@ -152,7 +154,12 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
 
     setTogglingTableId(table.id);
     setActionError(null);
-    const requestId = crypto.randomUUID();
+
+    // Giữ nguyên command requestId qua retry / timeout (UI-02)
+    if (!pendingToggleRequestIdsRef.current[table.id]) {
+      pendingToggleRequestIdsRef.current[table.id] = crypto.randomUUID();
+    }
+    const requestId = pendingToggleRequestIdsRef.current[table.id];
     const nextActive = !table.active;
 
     try {
@@ -162,9 +169,12 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
         requestId,
       });
 
+      // Thành công -> xóa requestId chờ
+      delete pendingToggleRequestIdsRef.current[table.id];
       onTableUpdated?.(updatedTable);
     } catch (err: unknown) {
       if (err instanceof MenuApiError) {
+        delete pendingToggleRequestIdsRef.current[table.id];
         const field = err.error.details?.field;
         const code = err.error.code;
 
@@ -177,6 +187,7 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
           setActionError(err.error.message || 'Không thể thay đổi trạng thái bàn.');
         }
       } else {
+        // Giữ lại requestId khi lỗi mạng để thử lại an toàn (UI-02)
         setActionError('Lỗi mạng khi thay đổi trạng thái bàn. Vui lòng thử lại.');
       }
     } finally {

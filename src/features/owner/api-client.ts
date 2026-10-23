@@ -1,4 +1,4 @@
-import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput } from "@contracts";
+import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput, OpenTableSessionInput, OwnerSessionOpenedView } from "@contracts";
 import { menuRequest } from "@/features/customer/api-client";
 import type { OwnerTableList, OwnerTable, OwnerQrCode, CreateTableInput, UpdateTableInput, WriteQrInput, RotateQrInput } from "@/types/contracts/table-qr";
 export { MenuApiError } from "@/features/customer/api-client";
@@ -14,3 +14,4 @@ export const updateOwnerTable = (id: string, input: UpdateTableInput): Promise<O
 export const fetchOwnerQrCodes = (): Promise<OwnerQrCode[]> => menuRequest("/api/owner/qr-codes");
 export const writeOwnerQrCode = (input: WriteQrInput): Promise<OwnerQrCode> => menuRequest("/api/owner/qr-codes", "POST", input);
 export const rotateOwnerQrCode = (id: string, input: RotateQrInput): Promise<OwnerQrCode> => menuRequest(`/api/owner/qr-codes/${encodeURIComponent(id)}/rotate`, "POST", input);
+export const openOwnerTableSession = (tableId: string, input: OpenTableSessionInput): Promise<OwnerSessionOpenedView> => menuRequest(`/api/owner/tables/${encodeURIComponent(tableId)}/sessions`, "POST", input);
