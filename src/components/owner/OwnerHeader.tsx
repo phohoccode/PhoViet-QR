@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Store, LogOut } from 'lucide-react';
+import { useFormStatus } from 'react-dom';
+import { Store, LogOut, Loader2 } from 'lucide-react';
 import { OwnerHeaderPills, type OwnerTabType } from './OwnerHeaderPills';
 
 interface OwnerHeaderProps {
@@ -10,8 +11,33 @@ interface OwnerHeaderProps {
   onTabChange: (tab: OwnerTabType) => void;
   ownerName?: string;
   roleLabel?: string;
+  isLoggingOut?: boolean;
   onLogout?: () => void;
+  logoutAction?: () => void | Promise<void>;
   className?: string;
+}
+
+function LogoutSubmitButton({ isMobile }: { isMobile?: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className={
+        isMobile
+          ? 'p-2 text-[#727B77] hover:text-[#B42318] rounded-xl hover:bg-[#FEF3F2] disabled:opacity-50 transition-colors'
+          : 'p-2 text-[#727B77] hover:text-[#B42318] hover:bg-[#FEF3F2] rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318] disabled:opacity-50'
+      }
+      title={pending ? 'Đang đăng xuất...' : 'Đăng xuất khỏi hệ thống'}
+      aria-label={pending ? 'Đang đăng xuất...' : 'Đăng xuất'}
+    >
+      {pending ? (
+        <Loader2 className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} animate-spin text-[#727B77]`} aria-hidden="true" />
+      ) : (
+        <LogOut className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} aria-hidden="true" />
+      )}
+    </button>
+  );
 }
 
 /**
@@ -24,7 +50,9 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
   onTabChange,
   ownerName = 'Sania',
   roleLabel = 'Chủ quán',
+  isLoggingOut = false,
   onLogout,
+  logoutAction,
   className = '',
 }) => {
   return (
@@ -48,14 +76,25 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
         </div>
 
         {/* Nút đăng xuất nhỏ trên mobile */}
-        <button
-          type="button"
-          onClick={onLogout}
-          className="md:hidden p-2 text-[#727B77] hover:text-[#B42318] rounded-xl hover:bg-[#FEF3F2]"
-          aria-label="Đăng xuất"
-        >
-          <LogOut className="w-5 h-5" />
-        </button>
+        {logoutAction ? (
+          <form action={logoutAction} className="md:hidden">
+            <LogoutSubmitButton isMobile />
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={onLogout}
+            disabled={isLoggingOut}
+            className="md:hidden p-2 text-[#727B77] hover:text-[#B42318] rounded-xl hover:bg-[#FEF3F2] disabled:opacity-50 transition-colors"
+            aria-label={isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất'}
+          >
+            {isLoggingOut ? (
+              <Loader2 className="w-5 h-5 animate-spin text-[#727B77]" aria-hidden="true" />
+            ) : (
+              <LogOut className="w-5 h-5" aria-hidden="true" />
+            )}
+          </button>
+        )}
       </div>
 
       {/* 2. Thanh 4 Tab viên thuốc căn giữa */}
@@ -75,15 +114,26 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onLogout}
-          className="p-2 text-[#727B77] hover:text-[#B42318] hover:bg-[#FEF3F2] rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318]"
-          title="Đăng xuất khỏi hệ thống"
-          aria-label="Đăng xuất"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+        {logoutAction ? (
+          <form action={logoutAction} className="inline-flex">
+            <LogoutSubmitButton />
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={onLogout}
+            disabled={isLoggingOut}
+            className="p-2 text-[#727B77] hover:text-[#B42318] hover:bg-[#FEF3F2] rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318] disabled:opacity-50"
+            title={isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất khỏi hệ thống'}
+            aria-label={isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất'}
+          >
+            {isLoggingOut ? (
+              <Loader2 className="w-4 h-4 animate-spin text-[#727B77]" aria-hidden="true" />
+            ) : (
+              <LogOut className="w-4 h-4" aria-hidden="true" />
+            )}
+          </button>
+        )}
       </div>
     </header>
   );

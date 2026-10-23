@@ -15,8 +15,12 @@ interface OwnerShellProps {
   tables?: TableSummary[];
   menuItems?: MenuItem[];
   initialTab?: OwnerTabType;
+  ownerName?: string;
+  roleLabel?: string;
+  isLoggingOut?: boolean;
   onClaimNext?: () => void;
   onLogout?: () => void;
+  logoutAction?: () => void | Promise<void>;
   className?: string;
 }
 
@@ -34,8 +38,12 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
   tables = [],
   menuItems = [],
   initialTab = 'orders',
+  ownerName,
+  roleLabel,
+  isLoggingOut = false,
   onClaimNext,
   onLogout,
+  logoutAction,
   className = '',
 }) => {
   const [activeTab, setActiveTab] = useState<OwnerTabType>(initialTab);
@@ -76,7 +84,11 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
           storeName={storeName}
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          ownerName={ownerName}
+          roleLabel={roleLabel}
+          isLoggingOut={isLoggingOut}
           onLogout={onLogout}
+          logoutAction={logoutAction}
         />
 
         {/* 2. Nội dung các Tab */}
