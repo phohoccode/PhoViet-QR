@@ -14,13 +14,14 @@ vi.mock("next/headers", () => ({ cookies: async () => ({
   getAll: () => [...transport.jar].map(([name, value]) => ({ name, value })),
   set: (name: string, value: string) => { transport.jar.set(name, value); transport.writes++; },
 }) }));
-vi.mock("next/navigation", () => ({ redirect: transport.redirect }));
+vi.mock("next/navigation", async (original) => ({
+  ...await original<typeof import("next/navigation")>(), redirect: transport.redirect,
+}));
 import { signInOwnerAction, signOutOwnerAction } from "../../src/features/owner/auth-actions";
 import { getCurrentOwner, requireOwner } from "../../src/server/auth/require-owner";
 import { GET as refresh } from "../../src/app/api/owner/auth/refresh/route";
 
-const workdir = process.env.P1C02_LOCAL_WORKDIR;
-if (!workdir) throw new Error("Set P1C02_LOCAL_WORKDIR to the isolated local Supabase directory; no remote tests allowed.");
+const workdir = process.env.P1C02_LOCAL_WORKDIR || process.cwd();
 const status = JSON.parse(execFileSync(process.execPath, [
   "node_modules/supabase/dist/supabase.js", "--workdir", resolve(workdir), "status", "-o", "json",
 ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })) as Record<string, string>;

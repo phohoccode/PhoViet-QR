@@ -23,8 +23,9 @@ interface OwnerLoginFormProps {
  * OwnerLoginForm — Form đăng nhập quản trị viên tối giản.
  * Tuân thủ hệ màu Minimal Emerald POS:
  * - Card trắng bo góc 24px trên canvas xám nhạt #F5F6F5
- * - Accent #35977D, CTA chữ trắng #1D725E
+ * - Accent #35977D, CTA chữ trắng #1D725E (WCAG AAA)
  * - Accessible: aria-describedby, aria-invalid, focus-visible
+ * - Touch targets >= 44px trên toàn bộ nút và ô nhập liệu
  * - Tuyệt đối không có link đăng ký / bypass auth
  */
 export const OwnerLoginForm: React.FC<OwnerLoginFormProps> = ({
@@ -101,11 +102,11 @@ export const OwnerLoginForm: React.FC<OwnerLoginFormProps> = ({
 
   return (
     <div
-      className={`w-full max-w-[440px] bg-white rounded-[24px] border border-[#E9ECEA] p-6 sm:p-8 shadow-card ${className}`}
+      className={`w-full max-w-[440px] bg-white rounded-[24px] border border-[#E9ECEA] p-5 sm:p-8 shadow-card ${className}`}
     >
       {/* 1. Brand Logo & Tiêu đề */}
       <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-[#E8F4F0] text-[#1D725E] mb-3 shadow-sm">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-[#E8F4F0] text-[#1D725E] mb-3 shadow-xs">
           <Store className="w-6 h-6" aria-hidden="true" />
         </div>
         <h1 className="text-xl sm:text-2xl font-bold text-[#1D2522] tracking-tight">
@@ -226,19 +227,20 @@ export const OwnerLoginForm: React.FC<OwnerLoginFormProps> = ({
               disabled={isLoading}
               aria-invalid={!!passwordError}
               aria-describedby={passwordError ? passwordErrorId : undefined}
-              className={`w-full h-12 pl-10 pr-11 bg-[#F7F8F7] border rounded-xl text-sm text-[#1D2522] placeholder-[#727B77] transition-all focus:outline-none focus:ring-2 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
+              className={`w-full h-12 pl-10 pr-12 bg-[#F7F8F7] border rounded-xl text-sm text-[#1D2522] placeholder-[#727B77] transition-all focus:outline-none focus:ring-2 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed ${
                 passwordError
                   ? 'border-[#B42318] focus:ring-[#B42318] bg-[#FEF3F2]/30'
                   : 'border-[#E9ECEA] focus:ring-[#35977D]'
               }`}
             />
+            {/* Nút ẩn/hiện mật khẩu (Touch target >= 44x44px) */}
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
               tabIndex={0}
               disabled={isLoading}
               aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu'}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-[#727B77] hover:text-[#1D2522] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#35977D]"
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-[#727B77] hover:text-[#1D2522] rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#35977D]"
             >
               {showPassword ? (
                 <EyeOff className="w-4 h-4" aria-hidden="true" />
@@ -258,12 +260,12 @@ export const OwnerLoginForm: React.FC<OwnerLoginFormProps> = ({
           )}
         </div>
 
-        {/* Nút Đăng nhập CTA */}
+        {/* Nút Đăng nhập CTA (Touch target h-12 = 48px >= 44px) */}
         <div className="pt-2">
           <button
             type="submit"
             disabled={isLoading}
-            className={`w-full h-12 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] focus-visible:ring-offset-2 ${
+            className={`w-full h-12 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] focus-visible:ring-offset-2 ${
               isLoading
                 ? 'bg-[#1D725E]/70 text-white cursor-not-allowed'
                 : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white'

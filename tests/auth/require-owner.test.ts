@@ -1,18 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ createClient: vi.fn(), verify: vi.fn(), redirect: vi.fn() }));
+const mocks = vi.hoisted(() => ({ createClient: vi.fn(), verify: vi.fn(), redirect: vi.fn(), rethrow: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabaseClient: mocks.createClient }));
 vi.mock("@/server/auth/verify-owner", async (original) => ({ ...await original<typeof import("../../src/server/auth/verify-owner")>(), verifyOwner: mocks.verify }));
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
+vi.mock("next/navigation", () => ({ redirect: mocks.redirect, unstable_rethrow: mocks.rethrow }));
 import { getCurrentOwner, requireOwner } from "../../src/server/auth/require-owner";
 import { OwnerAccessError } from "../../src/server/auth/verify-owner";
 
 beforeEach(() => {
+  mocks.rethrow.mockReset();
   mocks.createClient.mockResolvedValue({});
   mocks.verify.mockResolvedValue(null);
   mocks.redirect.mockImplementation((path) => { throw new Error(`NEXT_REDIRECT:${path}`); });
 });
 describe("dashboard server guard", () => {
+  it("preserves Next rendering control flow rather than reporting an auth outage", async () => {
+    const interrupt = new Error("Next render control flow");
+    mocks.createClient.mockRejectedValueOnce(interrupt);
+    mocks.rethrow.mockImplementationOnce((error) => { if (error === interrupt) throw error; });
+    await expect(getCurrentOwner()).rejects.toBe(interrupt);
+  });
+  it("preserves Next rendering control flow through the page guard", async () => {
+    const interrupt = new Error("Next render control flow");
+    mocks.createClient.mockRejectedValueOnce(interrupt);
+    mocks.rethrow.mockImplementation((error) => { if (error === interrupt) throw error; });
+    await expect(requireOwner()).rejects.toBe(interrupt);
+    expect(mocks.redirect).not.toHaveBeenCalled();
+  });
   it("redirects a guest to login", async () => {
     await expect(requireOwner()).rejects.toThrow("NEXT_REDIRECT:/login");
   });

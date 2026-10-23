@@ -28,4 +28,10 @@ describe("trusted membership authorization", () => {
   it("fails closed on a database error", async () => {
     await expect(verifyOwner(fixture("verified", null, { message: "internal" }).client)).rejects.toMatchObject({ code: "unavailable" });
   });
+  it("classifies a provider/network outage as unavailable, without querying membership", async () => {
+    const f = fixture(null, null);
+    f.raw.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: { status: 0, message: "private" } } as never);
+    await expect(verifyOwner(f.client)).rejects.toMatchObject({ code: "unavailable" });
+    expect(f.raw.from).not.toHaveBeenCalled();
+  });
 });

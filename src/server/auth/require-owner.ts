@@ -1,8 +1,9 @@
 import "server-only";
 
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { OwnerAccessError, verifyOwner, type OwnerContext } from "./verify-owner";
+import { logAuthEvent } from "./log";
 
 export async function getCurrentOwner(): Promise<OwnerContext | null> {
   let refreshRequired = false;
@@ -14,7 +15,10 @@ export async function getCurrentOwner(): Promise<OwnerContext | null> {
     if (owner && refreshRequired) throw new OwnerAccessError("refresh_required");
     return owner;
   } catch (error) {
+    // Preserve Next render/prerender control flow; it is not an auth outage.
+    unstable_rethrow(error);
     if (error instanceof OwnerAccessError) throw error;
+    logAuthEvent("auth.guard_failed");
     throw new OwnerAccessError("unavailable");
   }
 }
@@ -26,6 +30,7 @@ export async function requireOwner(): Promise<OwnerContext> {
   try {
     owner = await getCurrentOwner();
   } catch (error) {
+    unstable_rethrow(error);
     destination = error instanceof OwnerAccessError && error.code === "refresh_required"
       ? "/api/owner/auth/refresh"
       : error instanceof OwnerAccessError && error.code === "forbidden"

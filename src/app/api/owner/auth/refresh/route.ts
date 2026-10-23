@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getClientEnv } from "@/lib/env/client";
 import type { Database } from "@/lib/supabase/database";
 import { OwnerAccessError, verifyOwner } from "@/server/auth/verify-owner";
+import { logAuthEvent } from "@/server/auth/log";
 
 /** Cookie refresh transport only; authorization still runs in the dashboard guard. */
 export async function GET(request: NextRequest) {
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     const owner = await verifyOwner(client);
     if (!owner) response.headers.set("Location", new URL("/login", request.url).href);
   } catch (error) {
+    if (!(error instanceof OwnerAccessError)) logAuthEvent("auth.refresh_failed");
     const reason = error instanceof OwnerAccessError && error.code === "forbidden"
       ? "access_denied" : "service_unavailable";
     response.headers.set("Location", new URL(`/login?reason=${reason}`, request.url).href);

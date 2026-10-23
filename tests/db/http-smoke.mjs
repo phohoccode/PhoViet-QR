@@ -6,8 +6,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 
-const workdir = process.env.P1C02_LOCAL_WORKDIR;
-assert(workdir, "P1C02_LOCAL_WORKDIR must identify the isolated local project");
+const workdir = process.env.P1C02_LOCAL_WORKDIR || process.cwd();
 const config = readFileSync(resolve(workdir, "supabase/config.toml"), "utf8");
 assert.match(config, /^project_id\s*=\s*"qr-ordering-p1c02-local"/m);
 const status = JSON.parse(execFileSync(process.execPath, [
@@ -25,6 +24,8 @@ const users = [], storeId = randomUUID();
 const password = `${randomUUID()}aA!9`;
 const ownerEmail = `http-${randomUUID()}@example.invalid`, nonmemberEmail = `http-${randomUUID()}@example.invalid`;
 let server;
+let serverLogs = ""; // Never printed: inspect for leakage, then discard.
+const credentialValues = [password, ownerEmail, nonmemberEmail, status.SERVICE_ROLE_KEY];
 const runNext = args => new Promise((accept, reject) => {
   const child = spawn(process.execPath, ["node_modules/next/dist/bin/next", ...args], { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   let output = "";
@@ -62,6 +63,7 @@ const login = async (email, suppliedPassword = password) => {
   assert.equal(page.status, 200);
   const data = formData(await page.text());
   data.set("email", email); data.set("password", suppliedPassword);
+  data.set("storeId", storeId); data.set("role", "owner"); data.set("isOwner", "true");
   return request("/login", { method: "POST", headers: { Origin: base }, body: data });
 };
 const pathOf = response => new URL(response.headers.get("location"), base).pathname;
@@ -74,7 +76,9 @@ try {
   assert(!occupied, "Port 13002 is already occupied; no existing server will be stopped");
   await runNext(["build"]);
   report("production build with local public env; .env.local unchanged");
-  server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--hostname=127.0.0.1", "--port=13002"], { env, stdio: "ignore", windowsHide: true });
+  server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--hostname=127.0.0.1", "--port=13002"], { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  server.stdout.on("data", data => { serverLogs += data; });
+  server.stderr.on("data", data => { serverLogs += data; });
   for (let attempt = 0; ; attempt++) {
     try { await fetch(base, { signal: AbortSignal.timeout(1000) }); break; } catch {
       assert(attempt < 60 && server.exitCode === null, "Production server did not become ready");
@@ -92,6 +96,14 @@ try {
   assert.equal(guest.status, 307); assert.equal(pathOf(guest), "/login");
   report("guest dashboard -> login; public home/login remain accessible");
   assert.equal((await request("/")).status, 200);
+  for (const path of ["/q/PHASE1_TEST_LOCATOR", "/order/PHASE1_TEST_LOCATOR"]) {
+    assert.equal((await request(path)).status, 404);
+  }
+  const loginHtml = await (await request("/login")).text();
+  const asset = loginHtml.match(/src="([^\"]*\/_next\/static\/[^\"]+\.js[^\"]*)"/);
+  assert(asset, "Expected a Next static asset");
+  assert.equal((await request(decode(asset[1]))).status, 200);
+  report("static assets public; Phase 2 guest routes absent rather than fake success");
   const wrong = await login(ownerEmail, `${randomUUID()}wrong`);
   assert.equal(wrong.status, 200);
   const wrongHtml = await wrong.text();
@@ -118,6 +130,7 @@ try {
   const authCookieName = [...jar.keys()].find(name => name.endsWith("-auth-token"));
   assert(authCookieName, "Expected an unchunked local session cookie");
   const session = JSON.parse(Buffer.from(jar.get(authCookieName).slice("base64-".length), "base64url").toString());
+  credentialValues.push(session.access_token, session.refresh_token);
   session.expires_at = 1; // Real tokens; expired SDK metadata forces provider refresh.
   jar.set(authCookieName, `base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}`);
   const refreshRedirect = await request("/dashboard");
@@ -138,6 +151,7 @@ try {
   const outsider = createClient(status.API_URL, apiKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: authData, error: authError } = await outsider.auth.signInWithPassword({ email: nonmemberEmail, password });
   assert(!authError && authData.session, "Nonmember provider session creation failed");
+  credentialValues.push(authData.session.access_token, authData.session.refresh_token);
   const key = `sb-${new URL(status.API_URL).hostname.split(".")[0]}-auth-token`;
   jar.clear(); jar.set(key, `base64-${Buffer.from(JSON.stringify(authData.session)).toString("base64url")}`);
   const denied = await request("/dashboard");
@@ -156,6 +170,18 @@ try {
   assert.equal(refresh.status, 303); assert.equal(pathOf(refresh), "/login");
   assert.match(refresh.headers.get("cache-control"), /no-store/);
   report("anonymous refresh utility -> login, no-store");
+  const attackForm = formData(await (await request("/login")).text());
+  attackForm.set("email", ownerEmail); attackForm.set("password", password);
+  const crossOrigin = await request("/login", { method: "POST", headers: { Origin: "https://untrusted.example.invalid" }, body: attackForm });
+  assert.equal(crossOrigin.status, 500); // Next rejects Server Actions with an Origin/Host mismatch.
+  assert.equal(jar.size, 0);
+  assert.equal((await request("/dashboard")).status, 307);
+  report("cross-origin Server Action rejected before authentication; no session granted");
+  for (const credential of credentialValues.filter(Boolean)) {
+    assert(!serverLogs.includes(credential), "Sensitive value appeared in server logs (value withheld)");
+  }
+  assert(serverLogs.includes('"event":"auth.login_rejected"'), "Expected static auth failure event in server logs");
+  report("auth failure logs present; no fixture email/password/JWT/refresh/service key logged");
   // Each HTTP response above has an explicit expected status. The deliberately
   // malformed cookie may produce an SDK parse diagnostic even when safely denied.
 } finally {
@@ -165,5 +191,6 @@ try {
   sql(`begin; delete from public.owner_members where store_id='${storeId}'; delete from public.stores where id='${storeId}'; commit;`);
   for (const id of users) assert(!(await admin.auth.admin.deleteUser(id)).error, "Test user cleanup failed");
   jar.clear();
+  serverLogs = "";
   console.log("CLEANUP test users/store removed; test server stopped");
 }

@@ -13,7 +13,13 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
-    "test:auth": "vitest run --config tests/auth/vitest.config.mts"
+    "test:auth": "vitest run --config tests/auth/vitest.config.mts",
+    "test:db": "vitest run --config tests/db/vitest.config.mts",
+    "test:http": "node tests/db/http-smoke.mjs",
+    "supabase:start": "supabase start -x realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor",
+    "supabase:stop": "supabase stop",
+    "db:migrate": "supabase migration up --local",
+    "db:seed": "node supabase/seed-local.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

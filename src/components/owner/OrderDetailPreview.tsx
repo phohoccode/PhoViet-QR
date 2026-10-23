@@ -22,8 +22,8 @@ interface OrderDetailPreviewProps {
 }
 
 /**
- * OrderDetailPreview — Panel chi tiết đơn hàng (Cột phải 30% trên Desktop,
- * hoặc Sheet toàn màn hình trên Mobile/Tablet).
+ * OrderDetailPreview — Panel chi tiết đơn hàng (Cột phải ~30% trên Desktop).
+ * Giao diện trình diễn với nhãn xem trước minh bạch, không tự ý mutate logic nghiệp vụ.
  */
 export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
   order,
@@ -33,7 +33,7 @@ export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
 }) => {
   if (!order) {
     return (
-      <div className={`h-full flex flex-col items-center justify-center p-8 text-center text-[#727B77] ${className}`}>
+      <div className={`h-full flex flex-col items-center justify-center p-8 text-center text-[#727B77] bg-white rounded-2xl border border-[#E9ECEA] ${className}`}>
         <FileText className="w-12 h-12 text-[#E9ECEA] mb-3" aria-hidden="true" />
         <p className="text-sm font-semibold text-[#1D2522]">Chưa chọn đơn hàng</p>
         <p className="text-xs text-[#727B77] mt-1">
@@ -57,12 +57,12 @@ export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
             </h3>
             {isDineIn ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold bg-[#E8F4F0] text-[#1D725E]">
-                <MapPin className="w-3.5 h-3.5" />
+                <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>{order.table?.label || 'Tại bàn'}</span>
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-semibold bg-[#F1F3F2] text-[#55605C]">
-                <ShoppingBag className="w-3.5 h-3.5" />
+                <ShoppingBag className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Mang đi</span>
               </span>
             )}
@@ -72,7 +72,7 @@ export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
 
         <div className="flex items-center justify-between text-xs text-[#727B77] mt-2">
           <span className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Tạo lúc: {order.createdAt.substring(11, 16)}</span>
           </span>
           <OwnerStatusBadge status={order.payment.status} />
@@ -107,7 +107,7 @@ export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
                         </p>
                       )}
                       {line.note && (
-                        <p className="text-xs text-[#A76200] bg-[#FEF6EE] px-2 py-0.5 rounded mt-1 inline-block">
+                        <p className="text-xs text-[#8A4D00] bg-[#FEF6EE] px-2 py-0.5 rounded mt-1 inline-block">
                           Ghi chú: {line.note}
                         </p>
                       )}
@@ -126,7 +126,7 @@ export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
         {order.note && (
           <div className="mt-4 p-3 bg-[#FEF6EE] border border-[#F9DBAF] rounded-xl text-xs text-[#8A4D00]">
             <p className="font-semibold flex items-center gap-1 mb-0.5">
-              <AlertCircle className="w-3.5 h-3.5" />
+              <AlertCircle className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Ghi chú từ khách hàng:</span>
             </p>
             <p>{order.note}</p>
@@ -141,15 +141,20 @@ export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
           <span className="text-base font-bold text-[#1D2522]">{formattedTotal}</span>
         </div>
 
+        {/* Thông báo bản xem trước */}
+        <div className="p-2 rounded-xl bg-[#E8F4F0] border border-[#C6E7DC] text-[11px] text-[#1D725E] text-center font-medium">
+          Bản xem trước UI · Phân quyền & state machine FIFO sẽ do Codex xây dựng ở Phase 3
+        </div>
+
         {/* Nút hành động hợp lệ theo từng trạng thái */}
         {order.status === 'preparing' && (
           <button
             type="button"
             onClick={() => onMarkReady?.(order.id)}
-            className="w-full h-11 bg-[#35977D] hover:bg-[#1D725E] text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#35977D]"
+            className="w-full h-11 bg-[#35977D] hover:bg-[#1D725E] text-white rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#35977D]"
           >
-            <Bell className="w-4 h-4" />
-            <span>Đánh dấu món đã sẵn sàng</span>
+            <Bell className="w-4 h-4" aria-hidden="true" />
+            <span>Đánh dấu món đã sẵn sàng (Xem trước)</span>
           </button>
         )}
 
@@ -157,10 +162,10 @@ export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
           <button
             type="button"
             onClick={() => onComplete?.(order.id)}
-            className="w-full h-11 bg-[#1D725E] hover:bg-[#165B4B] text-white rounded-xl text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+            className="w-full h-11 bg-[#1D725E] hover:bg-[#165B4B] text-white rounded-xl text-xs md:text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
           >
-            <PackageCheck className="w-4 h-4" />
-            <span>{isDineIn ? 'Xác nhận đã phục vụ ra bàn' : 'Xác minh & Đã giao món'}</span>
+            <PackageCheck className="w-4 h-4" aria-hidden="true" />
+            <span>{isDineIn ? 'Xác nhận đã phục vụ ra bàn' : 'Xác minh & Đã giao món'} (Xem trước)</span>
           </button>
         )}
 
@@ -172,7 +177,7 @@ export const OrderDetailPreview: React.FC<OrderDetailPreviewProps> = ({
 
         {order.status === 'completed' && (
           <div className="p-2.5 rounded-xl bg-[#EAF5EA] text-[#1E561E] text-xs font-semibold text-center flex items-center justify-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4" />
+            <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
             <span>Đơn hàng đã hoàn tất phục vụ</span>
           </div>
         )}

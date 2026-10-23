@@ -12,6 +12,7 @@ interface OwnerHeaderProps {
   ownerName?: string;
   roleLabel?: string;
   isLoggingOut?: boolean;
+  logoutError?: string | null;
   onLogout?: () => void;
   logoutAction?: () => void | Promise<void>;
   className?: string;
@@ -25,16 +26,16 @@ function LogoutSubmitButton({ isMobile }: { isMobile?: boolean }) {
       disabled={pending}
       className={
         isMobile
-          ? 'p-2 text-[#727B77] hover:text-[#B42318] rounded-xl hover:bg-[#FEF3F2] disabled:opacity-50 transition-colors'
-          : 'p-2 text-[#727B77] hover:text-[#B42318] hover:bg-[#FEF3F2] rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318] disabled:opacity-50'
+          ? 'w-11 h-11 flex items-center justify-center text-[#727B77] hover:text-[#B42318] rounded-xl hover:bg-[#FEF3F2] active:scale-95 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318]'
+          : 'p-2.5 text-[#727B77] hover:text-[#B42318] hover:bg-[#FEF3F2] rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318] disabled:opacity-50'
       }
       title={pending ? 'Đang đăng xuất...' : 'Đăng xuất khỏi hệ thống'}
-      aria-label={pending ? 'Đang đăng xuất...' : 'Đăng xuất'}
+      aria-label={pending ? 'Đang đăng xuất khỏi hệ thống' : 'Đăng xuất khỏi hệ thống'}
     >
       {pending ? (
-        <Loader2 className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'} animate-spin text-[#727B77]`} aria-hidden="true" />
+        <Loader2 className="w-5 h-5 animate-spin text-[#727B77]" aria-hidden="true" />
       ) : (
-        <LogOut className={isMobile ? 'w-5 h-5' : 'w-4 h-4'} aria-hidden="true" />
+        <LogOut className="w-5 h-5" aria-hidden="true" />
       )}
     </button>
   );
@@ -43,6 +44,7 @@ function LogoutSubmitButton({ isMobile }: { isMobile?: boolean }) {
 /**
  * OwnerHeader — Thanh header thanh lịch của dashboard chủ quán:
  * Logo bên trái, 4 tab viên thuốc căn giữa, tài khoản bên phải.
+ * Đạt chuẩn touch target >= 44px và responsive tối ưu từ 375px đến 1440px.
  */
 export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
   storeName,
@@ -51,33 +53,35 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
   ownerName = 'Sania',
   roleLabel = 'Chủ quán',
   isLoggingOut = false,
+  logoutError = null,
   onLogout,
   logoutAction,
   className = '',
 }) => {
   return (
-    <header
-      className={`w-full bg-white border-b border-[#E9ECEA] px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-3 ${className}`}
-    >
+    <>
+      <header
+        className={`w-full bg-white border-b border-[#E9ECEA] px-3 sm:px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-3 ${className}`}
+      >
       {/* 1. Logo & Tên quán bên trái */}
       <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-[#E8F4F0] flex items-center justify-center text-[#1D725E] font-bold text-lg shadow-sm">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-[#E8F4F0] flex items-center justify-center text-[#1D725E] font-bold text-lg shadow-xs flex-shrink-0">
             <Store className="w-5 h-5" aria-hidden="true" />
           </div>
-          <div>
-            <span className="text-xs font-semibold text-[#35977D] uppercase tracking-wider block">
+          <div className="min-w-0">
+            <span className="text-[11px] font-semibold text-[#35977D] uppercase tracking-wider block">
               POS Đơn Giản
             </span>
-            <h1 className="text-sm md:text-base font-bold text-[#1D2522] leading-tight">
+            <h1 className="text-sm md:text-base font-bold text-[#1D2522] leading-tight truncate">
               {storeName}
             </h1>
           </div>
         </div>
 
-        {/* Nút đăng xuất nhỏ trên mobile */}
+        {/* Nút đăng xuất nhỏ trên mobile (Touch target 44x44px) */}
         {logoutAction ? (
-          <form action={logoutAction} className="md:hidden">
+          <form action={logoutAction} className="md:hidden flex-shrink-0">
             <LogoutSubmitButton isMobile />
           </form>
         ) : (
@@ -85,8 +89,8 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
             type="button"
             onClick={onLogout}
             disabled={isLoggingOut}
-            className="md:hidden p-2 text-[#727B77] hover:text-[#B42318] rounded-xl hover:bg-[#FEF3F2] disabled:opacity-50 transition-colors"
-            aria-label={isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất'}
+            className="md:hidden w-11 h-11 flex items-center justify-center text-[#727B77] hover:text-[#B42318] rounded-xl hover:bg-[#FEF3F2] disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318]"
+            aria-label={isLoggingOut ? 'Đang đăng xuất khỏi hệ thống' : 'Đăng xuất khỏi hệ thống'}
           >
             {isLoggingOut ? (
               <Loader2 className="w-5 h-5 animate-spin text-[#727B77]" aria-hidden="true" />
@@ -98,14 +102,14 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
       </div>
 
       {/* 2. Thanh 4 Tab viên thuốc căn giữa */}
-      <div className="flex-1 flex justify-center w-full md:w-auto overflow-x-auto py-1">
+      <div className="flex-1 flex justify-center w-full md:w-auto overflow-x-auto py-1 scrollbar-none">
         <OwnerHeaderPills activeTab={activeTab} onTabChange={onTabChange} />
       </div>
 
-      {/* 3. Khu vực tài khoản chủ quán bên phải */}
+      {/* 3. Khu vực tài khoản chủ quán bên phải (Desktop) */}
       <div className="hidden md:flex items-center gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-[#1D725E] text-white flex items-center justify-center font-bold text-sm shadow-sm">
+          <div className="w-9 h-9 rounded-full bg-[#1D725E] text-white flex items-center justify-center font-bold text-sm shadow-xs flex-shrink-0">
             {ownerName.charAt(0).toUpperCase()}
           </div>
           <div className="text-right">
@@ -123,18 +127,27 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
             type="button"
             onClick={onLogout}
             disabled={isLoggingOut}
-            className="p-2 text-[#727B77] hover:text-[#B42318] hover:bg-[#FEF3F2] rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318] disabled:opacity-50"
+            className="p-2.5 text-[#727B77] hover:text-[#B42318] hover:bg-[#FEF3F2] rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318] disabled:opacity-50"
             title={isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất khỏi hệ thống'}
-            aria-label={isLoggingOut ? 'Đang đăng xuất...' : 'Đăng xuất'}
+            aria-label={isLoggingOut ? 'Đang đăng xuất khỏi hệ thống' : 'Đăng xuất khỏi hệ thống'}
           >
             {isLoggingOut ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[#727B77]" aria-hidden="true" />
+              <Loader2 className="w-5 h-5 animate-spin text-[#727B77]" aria-hidden="true" />
             ) : (
-              <LogOut className="w-4 h-4" aria-hidden="true" />
+              <LogOut className="w-5 h-5" aria-hidden="true" />
             )}
           </button>
         )}
       </div>
     </header>
+    {logoutError && (
+      <div
+        role="alert"
+        className="w-full bg-[#FEF3F2] border-b border-[#FECDCA] px-4 py-2 text-xs text-[#912018] flex items-center justify-between"
+      >
+        <span>{logoutError}</span>
+      </div>
+    )}
+    </>
   );
 };

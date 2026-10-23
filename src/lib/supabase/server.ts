@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { getClientEnv } from "@/lib/env/client";
 import type { Database } from "./database";
+import { logAuthEvent } from "@/server/auth/log";
 
 type ServerClientOptions = {
   /** Only server actions may write via cookies(); rendering must use read-only. */
@@ -32,8 +33,13 @@ export async function createServerSupabaseClient(options: ServerClientOptions) {
             return;
           }
           // Do not swallow failed writes in a context that must persist auth.
-          for (const { name, value, options: cookieOptions } of values) {
-            cookieStore.set(name, value, cookieOptions);
+          try {
+            for (const { name, value, options: cookieOptions } of values) {
+              cookieStore.set(name, value, cookieOptions);
+            }
+          } catch {
+            logAuthEvent("auth.cookie_write_failed");
+            throw new Error("Không thể lưu phiên đăng nhập.");
           }
           // Server Actions are private/no-store in Next; refresh route separately
           // forwards the SSR SDK's explicit cache headers with cookie writes.

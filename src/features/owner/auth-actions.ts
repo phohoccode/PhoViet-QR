@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { validateOwnerLogin } from "@/server/auth/login-validation";
 import { verifyOwner } from "@/server/auth/verify-owner";
+import { logAuthEvent } from "@/server/auth/log";
 
 export type OwnerLoginActionState = {
   status: "idle" | "error";
@@ -25,17 +26,22 @@ export async function signInOwnerAction(
   try {
     const client = await createServerSupabaseClient({ cookieMode: "write" });
     const { error } = await client.auth.signInWithPassword(input.data);
-    if (error) return { status: "error", message: LOGIN_ERROR };
+    if (error) {
+      logAuthEvent("auth.login_rejected");
+      return { status: "error", message: LOGIN_ERROR };
+    }
 
     try {
       const owner = await verifyOwner(client);
       if (!owner) throw new Error("Owner authentication required");
     } catch {
       // Do not retain the new session when membership verification fails.
-      await client.auth.signOut({ scope: "local" });
+      const { error: signOutError } = await client.auth.signOut({ scope: "local" });
+      if (signOutError) logAuthEvent("auth.logout_failed");
       return { status: "error", message: LOGIN_ERROR };
     }
   } catch {
+    logAuthEvent("auth.login_failed");
     return { status: "error", message: LOGIN_ERROR };
   }
   // Next redirect throws; never swallow it in the provider error handler.
@@ -43,8 +49,13 @@ export async function signInOwnerAction(
 }
 
 export async function signOutOwnerAction(): Promise<void> {
-  const client = await createServerSupabaseClient({ cookieMode: "write" });
-  const { error } = await client.auth.signOut({ scope: "local" });
-  if (error) throw new Error("Không thể đăng xuất. Vui lòng thử lại.");
+  try {
+    const client = await createServerSupabaseClient({ cookieMode: "write" });
+    const { error } = await client.auth.signOut({ scope: "local" });
+    if (error) throw new Error("Sign-out failed");
+  } catch {
+    logAuthEvent("auth.logout_failed");
+    throw new Error("Không thể đăng xuất. Vui lòng thử lại.");
+  }
   redirect("/login");
 }

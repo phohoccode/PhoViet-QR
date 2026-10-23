@@ -3,6 +3,8 @@
  *
  * Dữ liệu giả lập (mock data) phục vụ render presentational UI Shells.
  * Tuyệt đối không chứa secret/token thật. Tuân thủ 100% docs/contracts/types.ts.
+ * Cung cấp đầy đủ fixtures cho Customer (Dine-in, Takeaway, Loading, Empty, Error, Offline, Invalid Session)
+ * và Owner (Orders, Tables, Menu, Settings).
  */
 
 import type {
@@ -12,6 +14,7 @@ import type {
   MenuItem,
   OrderDetail,
   TableSummary,
+  OrderType,
 } from '../../../docs/contracts/types';
 
 export const MOCK_STORE: StoreView = {
@@ -355,3 +358,68 @@ export const MOCK_TABLES_LIST: TableSummary[] = [
     session: null,
   },
 ];
+
+/* =============================================================================
+   CÁC FIXTURES TRẠNG THÁI GIAO DIỆN MỞ RỘNG CHO PHASE 2 BÀN GIAO (P1-G03)
+   ============================================================================= */
+
+/**
+ * Fixture Customer Chế độ Tại bàn (Dine-in)
+ */
+export const MOCK_CUSTOMER_DINE_IN = {
+  store: MOCK_STORE,
+  mode: 'dine_in' as OrderType,
+  tableLabel: 'Bàn 05',
+  categories: MOCK_CATEGORIES,
+  items: MOCK_MENU_ITEMS,
+  cartItemCount: 2,
+  cartTotalVnd: 67000,
+};
+
+/**
+ * Fixture Customer Chế độ Mang đi (Takeaway)
+ */
+export const MOCK_CUSTOMER_TAKEAWAY = {
+  store: MOCK_STORE,
+  mode: 'takeaway' as OrderType,
+  tableLabel: null,
+  categories: MOCK_CATEGORIES,
+  items: MOCK_MENU_ITEMS,
+  cartItemCount: 1,
+  cartTotalVnd: 42000,
+};
+
+/**
+ * Fixtures danh sách rỗng (Empty States)
+ */
+export const MOCK_EMPTY_ITEMS: MenuItem[] = [];
+export const MOCK_EMPTY_ORDERS: OrderDetail[] = [];
+export const MOCK_EMPTY_TABLES: TableSummary[] = [];
+
+/**
+ * Fixture ma trận các trạng thái Customer Shell
+ */
+export const MOCK_CUSTOMER_STATES = {
+  loading: {
+    ...MOCK_CUSTOMER_DINE_IN,
+    uiState: 'loading' as const,
+  },
+  empty: {
+    ...MOCK_CUSTOMER_DINE_IN,
+    items: MOCK_EMPTY_ITEMS,
+    uiState: 'empty' as const,
+  },
+  error: {
+    ...MOCK_CUSTOMER_DINE_IN,
+    uiState: 'error' as const,
+    errorMessage: 'Không thể kết nối đến máy chủ POS của quán. Vui lòng kiểm tra lại mạng.',
+  },
+  invalid_table_session: {
+    ...MOCK_CUSTOMER_DINE_IN,
+    uiState: 'invalid_table_session' as const,
+  },
+  offline: {
+    ...MOCK_CUSTOMER_DINE_IN,
+    uiState: 'offline' as const,
+  },
+};

@@ -1,5 +1,18 @@
 import { z } from "zod";
 
+function isPublicSupabaseKey(value: string): boolean {
+  if (value.startsWith("sb_publishable_")) return value.length > "sb_publishable_".length;
+  // Legacy anon keys are JWTs. Inspect only the role to reject an accidentally
+  // configured service-role key; Supabase remains responsible for verification.
+  const parts = value.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    return JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))).role === "anon";
+  } catch {
+    return false;
+  }
+}
+
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url().refine((value) => {
     // Zod refinements can also run after a URL-format issue; never throw raw input.
@@ -12,7 +25,7 @@ const clientEnvSchema = z.object({
     return url.protocol === "https:" ||
       (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname));
   }),
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().trim().min(1),
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().trim().min(1).refine(isPublicSupabaseKey),
 });
 
 export type ClientEnv = z.infer<typeof clientEnvSchema>;
