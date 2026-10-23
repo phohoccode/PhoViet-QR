@@ -28,7 +28,7 @@ beforeAll(async()=>{
 afterAll(async()=>{
  const qrIds=JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id='${stores[0]}'`)) as string[];
  const bucketKeys=[...users.flatMap(id=>[`owner:${id}:read`,`owner:${id}:write`]),...qrIds.map(id=>`read:${context.browserHash}:${id}`)].map(hashSecret);
- sql(`begin;delete from public.menu_audit_log where store_id in('${stores.join("','")}');delete from public.operation_requests where store_id in('${stores.join("','")}');
+ sql(`begin;set local session_replication_role=replica;delete from public.menu_audit_log where store_id in('${stores.join("','")}');delete from public.operation_requests where store_id in('${stores.join("','")}');
  delete from public.outbox_events where aggregate_id in('${stores.join("','")}');delete from public.menu_item_options where store_id in('${stores.join("','")}');
  delete from public.menu_items where store_id in('${stores.join("','")}');delete from public.menu_categories where store_id in('${stores.join("','")}');
  delete from public.qr_codes where store_id in('${stores.join("','")}');delete from public.dining_tables where store_id in('${stores.join("','")}');

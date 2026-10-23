@@ -41,3 +41,14 @@ Regression tests mới: `tests/unit/cart/request-lifecycle.test.ts`,12cases: ref
 | `git diff --check` | PASS |
 
 Cart client vẫn không authorize order hoặc xác nhận giá/thanh toán. Lần sửa này không tạo order, FIFO, payment và không giảm bảo vệ rate limit phía server.
+
+## Tái kiểm tra trên bản hiện tại
+
+Ngày 23/10/2026, commit `32f2ab1`: bản sửa trên đã có trong repo, không cần áp dụng lại. Các thay đổi P2-C04 đang có trong worktree được giữ nguyên.
+
+- Mở QR thật trong browser context mới tại localhost:3000: đúng 1 GET QR 200 rồi 1 GET menu 200.
+- Nhập tìm kiếm, phát 20 lượt sự kiện visibility/online và kiểm tra lại network: vẫn chỉ 2 request API, không có vòng lặp.
+- Giả lập transport QR 429 với Retry-After 3 giây: chỉ 1 request QR, không tải menu và không tự retry khi hết hạn. Bấm thử lại sau deadline tạo thêm đúng 1 request; 20 lượt click/visibility/online ngay sau đó không tạo thêm request, nút retry bị khóa trong cooldown.
+- Reload lại trang sau kiểm tra để gỡ transport mock.
+- Chạy lại bằng Node trực tiếp để tránh npm/PowerShell xử lý sai tham số: `node node_modules/vitest/vitest.mjs run --config tests/unit/vitest.config.mts` PASS 59/59; cấu hình `tests/ui/vitest.config.mts` PASS 36/36.
+- `npm run lint`, `npm run typecheck`, `git diff --check`: PASS. Không chạy lại build trong lần tái kiểm tra này.

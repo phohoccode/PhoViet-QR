@@ -41,7 +41,7 @@ afterAll(async () => {
     ...users.flatMap(id => [`owner:${id}:read`,`owner:${id}:write`]),
     ...qrIds.flatMap(id => [`verify-qr:${id}`,`verify-ip:${hashSecret("shared-ip")}:${id}`,...[...browserHashes].flatMap(hash => [`read:${hash}:${id}`,`verify:${hash}:${id}`])]),
   ].map(hashSecret);
-  sql(`begin; delete from public.guest_access where store_id in ('${stores.join("','")}');
+  sql(`begin;set local session_replication_role=replica;delete from public.guest_access where store_id in ('${stores.join("','")}');
     delete from public.session_code_deliveries where session_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));
     delete from public.operation_requests where store_id in('${stores.join("','")}');
     delete from public.outbox_events where aggregate_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));

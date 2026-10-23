@@ -1,5 +1,6 @@
 import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput } from "@contracts";
 import { menuRequest } from "@/features/customer/api-client";
+import type { OwnerTableList, OwnerTable, OwnerQrCode, CreateTableInput, UpdateTableInput, WriteQrInput, RotateQrInput } from "@/types/contracts/table-qr";
 export { MenuApiError } from "@/features/customer/api-client";
 export const fetchOwnerMenu = (includeInactive = true): Promise<OwnerMenuView> => menuRequest(`/api/owner/menu?includeInactive=${includeInactive}`);
 export const createMenuItem = (input: CreateMenuItemInput): Promise<OwnerMenuItem> => menuRequest("/api/owner/menu", "POST", input);
@@ -7,3 +8,9 @@ export const updateMenuItem = (id: string, input: PatchMenuItemInput): Promise<O
 export const fetchCategories = (): Promise<OwnerMenuCategory[]> => menuRequest("/api/owner/menu/categories");
 export const createCategory = (input: CreateMenuCategoryInput): Promise<OwnerMenuCategory> => menuRequest("/api/owner/menu/categories", "POST", input);
 export const updateCategory = (id: string, input: PatchMenuCategoryInput): Promise<OwnerMenuCategory> => menuRequest(`/api/owner/menu/categories/${encodeURIComponent(id)}`, "PATCH", input);
+export const fetchOwnerTables = (tableId?: string): Promise<OwnerTableList> => menuRequest(`/api/owner/tables${tableId ? `?tableId=${encodeURIComponent(tableId)}` : ""}`);
+export const createOwnerTable = (input: CreateTableInput): Promise<OwnerTable> => menuRequest("/api/owner/tables", "POST", input);
+export const updateOwnerTable = (id: string, input: UpdateTableInput): Promise<OwnerTable> => menuRequest(`/api/owner/tables/${encodeURIComponent(id)}`, "PATCH", input);
+export const fetchOwnerQrCodes = (): Promise<OwnerQrCode[]> => menuRequest("/api/owner/qr-codes");
+export const writeOwnerQrCode = (input: WriteQrInput): Promise<OwnerQrCode> => menuRequest("/api/owner/qr-codes", "POST", input);
+export const rotateOwnerQrCode = (id: string, input: RotateQrInput): Promise<OwnerQrCode> => menuRequest(`/api/owner/qr-codes/${encodeURIComponent(id)}/rotate`, "POST", input);

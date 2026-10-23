@@ -21,3 +21,53 @@ body {
 .scrollbar-none::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera */
 }
+
+/* ==========================================================================
+   Print Stylesheet for QR Vouchers (Table & Takeaway)
+   - Cách ly hoàn toàn vùng #qr-printable-area, ẩn navbar, header, shell và buttons.
+   - Định dạng chuẩn A6/A7 giấy trắng mực đen, quét được ngay sau khi in.
+   ========================================================================== */
+@media print {
+  @page {
+    margin: 10mm;
+    size: auto;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Ẩn toàn bộ shell giao diện dashboard khi in */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Chỉ hiển thị phiếu in mã QR */
+  #qr-printable-area,
+  #qr-printable-area * {
+    visibility: visible;
+  }
+
+  #qr-printable-area {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: auto;
+    min-height: 100%;
+    margin: 0 auto;
+    padding: 24px;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: none !important;
+    box-shadow: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 999999;
+  }
+}

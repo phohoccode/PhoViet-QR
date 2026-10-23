@@ -99,7 +99,7 @@ try{
 }finally{
  if(server&&server.exitCode===null)await new Promise(resolve=>{server.once("exit",resolve);server.kill();});
  const qrIds=JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id in('${stores.join("','")}')`));
- sql(`begin;delete from public.menu_audit_log where store_id in('${stores.join("','")}');delete from public.operation_requests where store_id in('${stores.join("','")}');delete from public.outbox_events where aggregate_id in('${stores.join("','")}');
+ sql(`begin;set local session_replication_role=replica;delete from public.menu_audit_log where store_id in('${stores.join("','")}');delete from public.operation_requests where store_id in('${stores.join("','")}');delete from public.outbox_events where aggregate_id in('${stores.join("','")}');
  delete from public.menu_item_options where store_id in('${stores.join("','")}');delete from public.menu_items where store_id in('${stores.join("','")}');delete from public.menu_categories where store_id in('${stores.join("','")}');delete from public.qr_codes where store_id in('${stores.join("','")}');delete from public.dining_tables where store_id in('${stores.join("','")}');delete from public.owner_members where store_id in('${stores.join("','")}');delete from public.stores where id in('${stores.join("','")}');
  delete from public.guest_browser_contexts where token_hash in('${[...contexts].join("','")}');
  delete from public.security_rate_buckets where key_hash in(select encode(extensions.digest(k,'sha256'),'hex') from unnest(array[${[...users.flatMap(id=>[`owner:${id}:read`,`owner:${id}:write`]),...[...contexts].flatMap(h=>qrIds.map(id=>`read:${h}:${id}`))].map(k=>`'${k}'`).join(",")}]::text[]) k);commit;`);

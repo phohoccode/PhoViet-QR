@@ -14,7 +14,7 @@ const password = `${randomUUID()}aA!9`, emails = [0,1,2].map(() => `qr-http-${ra
 const base = "http://localhost:13003";
 const env = { ...process.env, OWNER_BOOTSTRAP_ENABLED: "false", NEXT_PUBLIC_SUPABASE_URL: status.API_URL,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.PUBLISHABLE_KEY || status.ANON_KEY, SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY,
-  TABLE_SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_SESSION_ACTIVE_KEY_ID: "v1", APP_ORIGIN: base };
+  TABLE_SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_SESSION_ACTIVE_KEY_ID: "v1", APP_ORIGIN: base, APP_BASE_URL: "https://qr.example.invalid" };
 let server, logs = "";
 const secrets = [password, ...emails, status.SERVICE_ROLE_KEY];
 const allCookies = new Set();
@@ -120,7 +120,7 @@ try {
   const qrIds=JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id in('${stores.join("','")}')`));
   const browserHashes=[...guestTokens].map(hash);
   const buckets=[...users.flatMap(id=>[`owner:${id}:read`,`owner:${id}:write`]),...qrIds.flatMap(id=>[`verify-qr:${id}`,...browserHashes.flatMap(h=>[`read:${h}:${id}`,`verify:${h}:${id}`])])].map(hash);
-  sql(`begin;delete from public.guest_access where store_id in('${stores.join("','")}');delete from public.session_code_deliveries where session_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));
+  sql(`begin;set local session_replication_role=replica;delete from public.guest_access where store_id in('${stores.join("','")}');delete from public.session_code_deliveries where session_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));
     delete from public.operation_requests where store_id in('${stores.join("','")}');delete from public.outbox_events where aggregate_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));
     delete from public.table_sessions where store_id in('${stores.join("','")}');delete from public.qr_codes where store_id in('${stores.join("','")}');delete from public.dining_tables where store_id in('${stores.join("','")}');
     delete from public.owner_members where store_id in('${stores.join("','")}');delete from public.stores where id in('${stores.join("','")}');
