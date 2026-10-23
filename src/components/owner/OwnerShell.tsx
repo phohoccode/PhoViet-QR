@@ -1,8 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Play, Plus, QrCode } from 'lucide-react';
-import type { OrderDetail, TableSummary, MenuItem } from '../../../docs/contracts/types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Play, Plus, QrCode, RefreshCw, Loader2, KeyRound, ExternalLink } from 'lucide-react';
+import type {
+  OrderDetail,
+  TableSummary,
+  MenuItem,
+  QRCodeView,
+  OwnerSessionOpenedView,
+} from '../../../docs/contracts/types';
 import { OwnerHeader } from './OwnerHeader';
 import { type OwnerTabType } from './OwnerHeaderPills';
 import { OrderCardPreview } from './OrderCardPreview';
@@ -10,6 +16,7 @@ import { OrderDetailPreview } from './OrderDetailPreview';
 import { OrderDetailSheet } from './OrderDetailSheet';
 import { OwnerEmptyState } from './OwnerEmptyState';
 import { OwnerErrorState } from './OwnerErrorState';
+import { TableSessionOpenedDialog, TableDetailDialog } from './TableSessionDialog';
 import {
   OrdersQueueSkeleton,
   TablesGridSkeleton,
@@ -77,6 +84,240 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState<boolean>(false);
   const [orderFilter, setOrderFilter] = useState<'all' | 'dine_in' | 'takeaway'>('all');
   const [isClaiming, setIsClaiming] = useState<boolean>(false);
+
+  // =========================================================================
+  // KẾT NỐI API THỰC TẾ CHO TAB BÀN (R11 GET /api/owner/tables & R17 GET /api/owner/qr-codes)
+  // =========================================================================
+  const [tablesList, setTablesList] = useState<TableSummary[]>(tables);
+  const [qrCodesList, setQrCodesList] = useState<QRCodeView[]>([]);
+  const [currentTablesState, setCurrentTablesState] = useState<OwnerTabState>(tablesState);
+  const [tablesErrorMessage, setTablesErrorMessage] = useState<string | null>(null);
+  const [isFetchingTables, setIsFetchingTables] = useState<boolean>(false);
+
+  // Quản lý mở phiên bàn (R12 POST /api/owner/tables/:id/sessions)
+  const [openingTableId, setOpeningTableId] = useState<string | null>(null);
+  const [openedSessionView, setOpenedSessionView] = useState<OwnerSessionOpenedView | null>(null);
+  const [selectedTableForDetail, setSelectedTableForDetail] = useState<TableSummary | null>(null);
+  const [openSessionError, setOpenSessionError] = useState<{ tableId: string; message: string } | null>(null);
+
+  // Nạp danh sách bàn từ R11 và danh sách QR từ R17 (Dùng khi user bấm "Làm mới" hoặc "Thử lại")
+  const fetchTablesAndQRs = useCallback(async () => {
+    setIsFetchingTables(true);
+    setTablesErrorMessage(null);
+    setOpenSessionError(null);
+    onRetryTables?.();
+
+    try {
+      const [tablesRes, qrRes] = await Promise.all([
+        fetch('/api/owner/tables', {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        }),
+        fetch('/api/owner/qr-codes', {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+        }),
+      ]);
+
+      let hasTablesData = false;
+
+      if (tablesRes.ok) {
+        const tablesJson = await tablesRes.json();
+        if (tablesJson?.data?.tables) {
+          setTablesList(tablesJson.data.tables);
+          hasTablesData = true;
+        }
+      }
+
+      if (qrRes.ok) {
+        const qrJson = await qrRes.json();
+        if (qrJson?.data) {
+          setQrCodesList(qrJson.data);
+        }
+      }
+
+      if (hasTablesData) {
+        setCurrentTablesState('ready');
+        setIsFetchingTables(false);
+        return;
+      }
+
+      // Xử lý lỗi từ server
+      let errMessage = 'Không thể tải sơ đồ bàn từ máy chủ.';
+      try {
+        const errJson = await tablesRes.json();
+        if (errJson?.error?.message) {
+          errMessage = errJson.error.message;
+        }
+      } catch {
+        // Non-JSON
+      }
+
+      // Nếu ở dev mode và chưa đăng nhập Supabase, fallback sang fixtures
+      if (process.env.NODE_ENV !== 'production' && tables.length > 0) {
+        setTablesList(tables);
+        setCurrentTablesState('ready');
+        setIsFetchingTables(false);
+        return;
+      }
+
+      setTablesErrorMessage(errMessage);
+      setCurrentTablesState('error');
+    } catch {
+      if (process.env.NODE_ENV !== 'production' && tables.length > 0) {
+        setTablesList(tables);
+        setCurrentTablesState('ready');
+        setIsFetchingTables(false);
+        return;
+      }
+      setTablesErrorMessage('Lỗi mạng khi kết nối tới dịch vụ quản lý bàn.');
+      setCurrentTablesState('error');
+    } finally {
+      setIsFetchingTables(false);
+    }
+  }, [tables, onRetryTables]);
+
+  // Tự động tải dữ liệu khi chuyển sang tab bàn không gây cascading render
+  useEffect(() => {
+    if (activeTab !== 'tables') return;
+
+    let isCancelled = false;
+
+    (async () => {
+      try {
+        const [tablesRes, qrRes] = await Promise.all([
+          fetch('/api/owner/tables', {
+            credentials: 'include',
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+          }),
+          fetch('/api/owner/qr-codes', {
+            credentials: 'include',
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+          }),
+        ]);
+
+        if (isCancelled) return;
+
+        let hasData = false;
+        if (tablesRes.ok) {
+          const tablesJson = await tablesRes.json();
+          if (tablesJson?.data?.tables) {
+            setTablesList(tablesJson.data.tables);
+            hasData = true;
+          }
+        }
+
+        if (qrRes.ok) {
+          const qrJson = await qrRes.json();
+          if (qrJson?.data) {
+            setQrCodesList(qrJson.data);
+          }
+        }
+
+        if (hasData) {
+          setCurrentTablesState('ready');
+          return;
+        }
+
+        let errMessage = 'Không thể tải sơ đồ bàn từ máy chủ.';
+        try {
+          const errJson = await tablesRes.json();
+          if (errJson?.error?.message) {
+            errMessage = errJson.error.message;
+          }
+        } catch {
+          // Non-JSON
+        }
+
+        if (process.env.NODE_ENV !== 'production' && tables.length > 0) {
+          setTablesList(tables);
+          setCurrentTablesState('ready');
+          return;
+        }
+
+        setTablesErrorMessage(errMessage);
+        setCurrentTablesState('error');
+      } catch {
+        if (isCancelled) return;
+        if (process.env.NODE_ENV !== 'production' && tables.length > 0) {
+          setTablesList(tables);
+          setCurrentTablesState('ready');
+          return;
+        }
+        setTablesErrorMessage('Lỗi mạng khi kết nối tới dịch vụ quản lý bàn.');
+        setCurrentTablesState('error');
+      }
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTab, tables]);
+
+  // Gọi R12 POST /api/owner/tables/:id/sessions để mở phiên bàn mới
+  const handleOpenTableSession = async (table: TableSummary) => {
+    setOpeningTableId(table.id);
+    setOpenSessionError(null);
+
+    // Sinh UUID duy nhất cho command request
+    const requestId = crypto.randomUUID();
+
+    try {
+      const res = await fetch(`/api/owner/tables/${table.id}/sessions`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requestId }),
+      });
+
+      if (res.status === 201) {
+        const json = await res.json();
+        const opened: OwnerSessionOpenedView = json.data;
+
+        // Cập nhật trạng thái bàn trong tablesList
+        setTablesList((prev) =>
+          prev.map((item) =>
+            item.id === table.id
+              ? { ...item, session: opened.session }
+              : item
+          )
+        );
+
+        // Chỉ hiển thị mã từ phản hồi private của command này
+        setOpenedSessionView(opened);
+        setOpeningTableId(null);
+        return;
+      }
+
+      let errorMsg = 'Không thể mở phiên bàn.';
+      try {
+        const errJson = await res.json();
+        errorMsg = errJson?.error?.message || errorMsg;
+      } catch {
+        // Non-JSON
+      }
+
+      if (res.status === 409) {
+        errorMsg = 'Bàn đã có phiên đang hoạt động hoặc trùng lặp yêu cầu. Đang tải lại sơ đồ bàn...';
+        fetchTablesAndQRs();
+      }
+
+      setOpenSessionError({ tableId: table.id, message: errorMsg });
+    } catch {
+      setOpenSessionError({
+        tableId: table.id,
+        message: 'Lỗi mạng khi gửi lệnh mở phiên bàn. Vui lòng thử lại.',
+      });
+    } finally {
+      setOpeningTableId(null);
+    }
+  };
 
   // Lọc đơn hàng theo loại
   const filteredOrders = orders.filter((o) => {
@@ -303,7 +544,7 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
           )}
 
           {/* =================================================================
-              TAB 2: BÀN (Lưới trạng thái bàn)
+              TAB 2: BÀN (Lưới trạng thái bàn kết nối R11/R12/R17)
              ================================================================= */}
           {activeTab === 'tables' && (
             <div className="flex-1 flex flex-col gap-4">
@@ -311,63 +552,199 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
                 <div>
                   <h3 className="text-base font-bold text-[#1D2522]">Quản lý bàn phục vụ</h3>
                   <p className="text-xs text-[#727B77]">
-                    Lưới trạng thái bàn trực quan (không kéo thả floorplan).
+                    Lưới trạng thái bàn trực quan kết nối R11 và mở phiên bàn R12.
                   </p>
                 </div>
-                <span className="text-xs font-semibold px-3 py-1 bg-[#E8F4F0] text-[#1D725E] rounded-full">
-                  {tables.filter((t) => t.session !== null).length} / {tables.length} bàn đang dùng
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={fetchTablesAndQRs}
+                    disabled={isFetchingTables}
+                    className="h-8 px-3 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-xs font-semibold text-[#1D2522] flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 text-[#35977D] ${
+                        isFetchingTables ? 'animate-spin' : ''
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span>Làm mới</span>
+                  </button>
+                  <span className="text-xs font-semibold px-3 py-1 bg-[#E8F4F0] text-[#1D725E] rounded-full">
+                    {tablesList.filter((t) => t.session !== null).length} / {tablesList.length} bàn đang dùng
+                  </span>
+                </div>
               </div>
 
-              {tablesState === 'loading' && <TablesGridSkeleton />}
+              {openSessionError && (
+                <div
+                  role="alert"
+                  className="p-3 bg-[#FEF3F2] border border-[#FECDCA] rounded-xl text-xs text-[#912018] flex items-center justify-between"
+                >
+                  <span>{openSessionError.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setOpenSessionError(null)}
+                    className="text-[#912018] font-bold hover:underline ml-2"
+                  >
+                    Đóng
+                  </button>
+                </div>
+              )}
 
-              {tablesState === 'error' && (
+              {currentTablesState === 'loading' && <TablesGridSkeleton />}
+
+              {currentTablesState === 'error' && (
                 <OwnerErrorState
                   title="Không thể tải sơ đồ bàn"
-                  description="Có lỗi khi kết nối dữ liệu phiên bàn từ máy chủ."
-                  onRetry={onRetryTables}
+                  description={tablesErrorMessage || "Có lỗi khi kết nối dữ liệu phiên bàn từ máy chủ."}
+                  onRetry={fetchTablesAndQRs}
                 />
               )}
 
-              {tablesState === 'ready' && tables.length === 0 && (
+              {currentTablesState === 'ready' && tablesList.length === 0 && (
                 <OwnerEmptyState
                   title="Chưa có bàn nào được thiết lập"
                   description="Quán chưa tạo danh sách bàn phục vụ. Hãy liên hệ quản trị hệ thống."
                 />
               )}
 
-              {tablesState === 'ready' && tables.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
-                  {tables.map((t) => {
-                    const isOccupied = t.session !== null;
-                    return (
-                      <div
-                        key={t.id}
-                        className={`p-4 rounded-2xl border text-center transition-all ${
-                          isOccupied
-                            ? 'bg-[#E8F4F0]/60 border-[#35977D]'
-                            : 'bg-white border-[#E9ECEA] hover:border-[#C6E7DC]'
-                        }`}
-                      >
-                        <span className="text-sm font-bold text-[#1D2522] block">{t.label}</span>
-                        <span
-                          className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+              {currentTablesState === 'ready' && tablesList.length > 0 && (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
+                    {tablesList.map((t) => {
+                      const isOccupied = t.session !== null;
+                      const matchedQr = qrCodesList.find(
+                        (q) => q.type === 'table' && q.table?.id === t.id
+                      );
+                      const isOpening = openingTableId === t.id;
+
+                      return (
+                        <div
+                          key={t.id}
+                          className={`p-3.5 rounded-2xl border flex flex-col justify-between text-center transition-all ${
                             isOccupied
-                              ? 'bg-[#E8F4F0] text-[#1D725E] border border-[#C6E7DC]'
-                              : 'bg-[#F7F8F7] text-[#727B77] border border-[#E9ECEA]'
+                              ? 'bg-[#E8F4F0]/60 border-[#35977D] shadow-xs'
+                              : 'bg-white border-[#E9ECEA] hover:border-[#C6E7DC]'
                           }`}
                         >
-                          {isOccupied ? 'Có khách' : 'Trống'}
-                        </span>
-                        {t.session && (
-                          <p className="text-xs font-bold text-[#1D2522] mt-2">
-                            {new Intl.NumberFormat('vi-VN').format(t.session.totalVnd)} đ
+                          <div>
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className="text-sm font-bold text-[#1D2522] truncate block">
+                                {t.label}
+                              </span>
+                              {matchedQr && (
+                                <span
+                                  title={`QR Path: ${matchedQr.path}`}
+                                  className="text-[10px] font-mono text-[#727B77] bg-white/80 px-1 rounded border border-[#E9ECEA]"
+                                >
+                                  QR
+                                </span>
+                              )}
+                            </div>
+
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                                isOccupied
+                                  ? t.session?.status === 'checkout_pending'
+                                    ? 'bg-[#FEF3F2] text-[#B42318] border border-[#FECDCA]'
+                                    : 'bg-[#E8F4F0] text-[#1D725E] border border-[#C6E7DC]'
+                                  : 'bg-[#F7F8F7] text-[#727B77] border border-[#E9ECEA]'
+                              }`}
+                            >
+                              {isOccupied
+                                ? t.session?.status === 'checkout_pending'
+                                  ? 'Chờ tính tiền'
+                                  : 'Có khách'
+                                : 'Bàn trống'}
+                            </span>
+
+                            {t.session && (
+                              <div className="mt-2 text-left bg-white/70 p-2 rounded-xl border border-[#C6E7DC]/60 text-xs">
+                                <p className="font-bold text-[#1D2522]">
+                                  {new Intl.NumberFormat('vi-VN').format(t.session.totalVnd)} đ
+                                </p>
+                                <p className="text-[11px] text-[#727B77]">
+                                  {t.session.orderCount} đơn gọi
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-3 pt-2 border-t border-[#E9ECEA]/60">
+                            {isOccupied ? (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTableForDetail(t)}
+                                className="w-full h-8 px-2 rounded-xl bg-white hover:bg-[#F7F8F7] border border-[#C6E7DC] text-[#1D725E] text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+                              >
+                                <span>Chi tiết phiên</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenTableSession(t)}
+                                disabled={isOpening || !t.active}
+                                className={`w-full h-8 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                                  isOpening
+                                    ? 'bg-[#1D725E]/70 text-white cursor-not-allowed'
+                                    : !t.active
+                                    ? 'bg-[#F1F3F2] text-[#A0A8A5] cursor-not-allowed'
+                                    : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-95 text-white'
+                                }`}
+                              >
+                                {isOpening ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                                    <span>Đang mở...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <KeyRound className="w-3.5 h-3.5" aria-hidden="true" />
+                                    <span>Mở phiên bàn</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Hiển thị QR Mang đi từ R17 nếu có */}
+                  {qrCodesList.filter((q) => q.type === 'takeaway').length > 0 && (
+                    <div className="mt-4 p-4 bg-[#F7F8F7] border border-[#E9ECEA] rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-white border border-[#E9ECEA] flex items-center justify-center text-[#1D725E] shadow-xs">
+                          <QrCode className="w-5 h-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-[#1D2522]">
+                            Mã QR Mang đi tại quầy (R17)
+                          </h4>
+                          <p className="text-xs text-[#727B77]">
+                            Khách quét mã này để đặt mang đi không cần xác minh phiên bàn.
                           </p>
-                        )}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-medium bg-white px-2.5 py-1 rounded-lg border border-[#E9ECEA]">
+                          {qrCodesList.find((q) => q.type === 'takeaway')?.path}
+                        </span>
+                        <a
+                          href={qrCodesList.find((q) => q.type === 'takeaway')?.path}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="h-8 px-3 rounded-lg bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <span>Mở link</span>
+                          <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -496,6 +873,29 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
           )}
         </main>
       </div>
+
+      {/* =====================================================================
+          MODAL DIALOGS CHO TAB BÀN (R12 Private Result & Detail View)
+         ===================================================================== */}
+      {openedSessionView && (
+        <TableSessionOpenedDialog
+          openedView={openedSessionView}
+          qrCode={qrCodesList.find(
+            (q) => q.type === 'table' && q.table?.id === openedSessionView.table.id
+          )}
+          onClose={() => setOpenedSessionView(null)}
+        />
+      )}
+
+      {selectedTableForDetail && (
+        <TableDetailDialog
+          table={selectedTableForDetail}
+          qrCode={qrCodesList.find(
+            (q) => q.type === 'table' && q.table?.id === selectedTableForDetail.id
+          )}
+          onClose={() => setSelectedTableForDetail(null)}
+        />
+      )}
     </div>
   );
 };

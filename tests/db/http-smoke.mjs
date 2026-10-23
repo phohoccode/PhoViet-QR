@@ -14,7 +14,7 @@ const status = JSON.parse(execFileSync(process.execPath, [
 ], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
 assert.equal(status.API_URL, "http://127.0.0.1:15421", "Refusing remote/non-isolated Auth");
 const apiKey = status.PUBLISHABLE_KEY || status.ANON_KEY;
-const env = { ...process.env, NEXT_PUBLIC_SUPABASE_URL: status.API_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: apiKey };
+const env = { ...process.env, OWNER_BOOTSTRAP_ENABLED: "false", NEXT_PUBLIC_SUPABASE_URL: status.API_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: apiKey, SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY };
 const admin = createClient(status.API_URL, status.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 const container = "supabase_db_qr-ordering-p1c02-local";
 const sql = input => execFileSync("docker", ["exec", "-i", container, "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-At"],
@@ -96,14 +96,15 @@ try {
   assert.equal(guest.status, 307); assert.equal(pathOf(guest), "/login");
   report("guest dashboard -> login; public home/login remain accessible");
   assert.equal((await request("/")).status, 200);
-  for (const path of ["/q/PHASE1_TEST_LOCATOR", "/order/PHASE1_TEST_LOCATOR"]) {
-    assert.equal((await request(path)).status, 404);
-  }
+  // P2-G01 now owns a public QR shell; only the backend resolver decides validity.
+  assert.equal((await request("/q/PHASE1_TEST_LOCATOR")).status, 200);
+  assert.equal((await request("/api/public/qr/PHASE1_TEST_LOCATOR")).status, 404);
+  assert.equal((await request("/order/PHASE1_TEST_LOCATOR")).status, 404);
   const loginHtml = await (await request("/login")).text();
   const asset = loginHtml.match(/src="([^\"]*\/_next\/static\/[^\"]+\.js[^\"]*)"/);
   assert(asset, "Expected a Next static asset");
   assert.equal((await request(decode(asset[1]))).status, 200);
-  report("static assets public; Phase 2 guest routes absent rather than fake success");
+  report("static assets/QR shell public; invalid QR API and unimplemented order page return 404");
   const wrong = await login(ownerEmail, `${randomUUID()}wrong`);
   assert.equal(wrong.status, 200);
   const wrongHtml = await wrong.text();

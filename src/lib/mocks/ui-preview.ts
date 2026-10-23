@@ -14,18 +14,19 @@ import type {
   MenuItem,
   OrderDetail,
   TableSummary,
+  QRCodeView,
   OrderType,
 } from '../../../docs/contracts/types';
 
 export const MOCK_STORE: StoreView = {
-  id: 'store-moc-01',
-  name: 'Tiệm Cà Phê Mộc',
+  id: 'c0200000-0000-4000-8000-000000000001',
+  name: 'PHỞ VIỆT QR',
   timezone: 'Asia/Ho_Chi_Minh',
   acceptingOrders: true,
 };
 
 export const MOCK_TABLE_05: TableRef = {
-  id: 'table-05',
+  id: 'c0200000-0000-4000-8000-000000000005',
   label: 'Bàn 05',
 };
 
@@ -295,11 +296,11 @@ export const MOCK_OWNER_ORDERS: OrderDetail[] = [
 
 export const MOCK_TABLES_LIST: TableSummary[] = [
   {
-    id: 'table-01',
+    id: 'c0200000-0000-4000-8000-000000000002',
     label: 'Bàn 01',
     active: true,
     session: {
-      id: 'sess-01',
+      id: 'c0200000-0000-4000-8000-000000000011',
       status: 'open',
       openedAt: '2026-10-23T06:30:00Z',
       closedAt: null,
@@ -310,17 +311,17 @@ export const MOCK_TABLES_LIST: TableSummary[] = [
     },
   },
   {
-    id: 'table-02',
+    id: 'c0200000-0000-4000-8000-000000000003',
     label: 'Bàn 02',
     active: true,
     session: null, // Bàn trống
   },
   {
-    id: 'table-03',
+    id: 'c0200000-0000-4000-8000-000000000004',
     label: 'Bàn 03',
     active: true,
     session: {
-      id: 'sess-03',
+      id: 'c0200000-0000-4000-8000-000000000013',
       status: 'checkout_pending',
       openedAt: '2026-10-23T06:45:00Z',
       closedAt: null,
@@ -331,17 +332,17 @@ export const MOCK_TABLES_LIST: TableSummary[] = [
     },
   },
   {
-    id: 'table-04',
+    id: 'c0200000-0000-4000-8000-000000000005',
     label: 'Bàn 04',
     active: true,
     session: null,
   },
   {
-    id: 'table-05',
+    id: 'c0200000-0000-4000-8000-000000000006',
     label: 'Bàn 05',
     active: true,
     session: {
-      id: 'sess-05',
+      id: 'c0200000-0000-4000-8000-000000000015',
       status: 'open',
       openedAt: '2026-10-23T07:10:00Z',
       closedAt: null,
@@ -352,10 +353,40 @@ export const MOCK_TABLES_LIST: TableSummary[] = [
     },
   },
   {
-    id: 'table-06',
+    id: 'c0200000-0000-4000-8000-000000000007',
     label: 'Bàn 06',
     active: true,
     session: null,
+  },
+];
+
+/**
+ * Fixture danh sách QR Codes từ R17 phục vụ Dev Preview
+ */
+export const MOCK_QR_CODES_LIST: QRCodeView[] = [
+  {
+    id: 'c0200000-0000-4000-8000-000000000021',
+    publicCode: 'BAN01_DEMO_CODE',
+    path: '/q/BAN01_DEMO_CODE',
+    active: true,
+    type: 'table',
+    table: { id: 'c0200000-0000-4000-8000-000000000002', label: 'Bàn 01' },
+  },
+  {
+    id: 'c0200000-0000-4000-8000-000000000022',
+    publicCode: 'BAN02_DEMO_CODE',
+    path: '/q/BAN02_DEMO_CODE',
+    active: true,
+    type: 'table',
+    table: { id: 'c0200000-0000-4000-8000-000000000003', label: 'Bàn 02' },
+  },
+  {
+    id: 'c0200000-0000-4000-8000-000000000023',
+    publicCode: 'COUNTER_TAKEAWAY_CODE',
+    path: '/q/COUNTER_TAKEAWAY_CODE',
+    active: true,
+    type: 'takeaway',
+    table: null,
   },
 ];
 
@@ -423,3 +454,69 @@ export const MOCK_CUSTOMER_STATES = {
     uiState: 'offline' as const,
   },
 };
+
+/* =============================================================================
+   MOCK FIXTURES CHO QR RESOLUTION (PHASE 2 — P2-G01)
+   Tuân thủ 100% định dạng QRResolution trong docs/contracts/types.ts
+   ============================================================================= */
+
+/**
+ * QR bàn chưa xác minh phiên: requiresSessionCode = true, session = null
+ */
+export const MOCK_QR_TABLE_UNVERIFIED: import('../../../docs/contracts/types').QRResolution = {
+  type: 'table',
+  mode: 'dine_in',
+  store: MOCK_STORE,
+  table: MOCK_TABLE_05,
+  requiresSessionCode: true,
+  session: null,
+};
+
+/**
+ * QR bàn đã xác minh phiên thành công: requiresSessionCode = false, session = { id, status: 'open' }
+ */
+export const MOCK_QR_TABLE_VERIFIED: import('../../../docs/contracts/types').QRResolution = {
+  type: 'table',
+  mode: 'dine_in',
+  store: MOCK_STORE,
+  table: MOCK_TABLE_05,
+  requiresSessionCode: false,
+  session: {
+    id: 'sess-table-05',
+    status: 'open',
+  },
+};
+
+/**
+ * QR bàn đang chờ tính tiền (checkout pending): requiresSessionCode = false, status = 'checkout_pending'
+ */
+export const MOCK_QR_TABLE_CHECKOUT_PENDING: import('../../../docs/contracts/types').QRResolution = {
+  type: 'table',
+  mode: 'dine_in',
+  store: MOCK_STORE,
+  table: MOCK_TABLE_05,
+  requiresSessionCode: false,
+  session: {
+    id: 'sess-table-05',
+    status: 'checkout_pending',
+  },
+};
+
+/**
+ * QR mang đi tại quầy: type = 'takeaway', mode = 'takeaway', table = null, requiresSessionCode = false, session = null
+ */
+export const MOCK_QR_TAKEAWAY: import('../../../docs/contracts/types').QRResolution = {
+  type: 'takeaway',
+  mode: 'takeaway',
+  store: MOCK_STORE,
+  table: null,
+  requiresSessionCode: false,
+  session: null,
+};
+
+/**
+ * Mã phiên bàn demo hợp lệ để thử nghiệm giao diện trong môi trường dev
+ * (Trong production, mã này được cấp ngẫu nhiên từ server Codex qua POS)
+ */
+export const DEMO_VALID_SESSION_CODES = ['8821', 'MOC88', 'TABLE05', '1234'];
+

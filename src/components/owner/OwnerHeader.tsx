@@ -71,7 +71,7 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
           </div>
           <div className="min-w-0">
             <span className="text-[11px] font-semibold text-[#35977D] uppercase tracking-wider block">
-              POS Đơn Giản
+              POS 
             </span>
             <h1 className="text-sm md:text-base font-bold text-[#1D2522] leading-tight truncate">
               {storeName}

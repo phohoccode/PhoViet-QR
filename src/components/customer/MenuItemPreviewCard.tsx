@@ -86,14 +86,21 @@ export const MenuItemPreviewCard: React.FC<MenuItemPreviewCardProps> = ({
       <div className="flex-shrink-0">
         <button
           type="button"
-          disabled={!isAvailable}
+          disabled={!isAvailable || !onAddClick}
           onClick={() => onAddClick?.(item)}
           className={`w-11 h-11 rounded-xl flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
-            isAvailable
+            isAvailable && onAddClick
               ? 'bg-[#E8F4F0] text-[#1D725E] hover:bg-[#1D725E] hover:text-white active:scale-95'
               : 'bg-[#F1F3F2] text-[#A0A8A5] cursor-not-allowed'
           }`}
-          aria-label={isAvailable ? `Thêm ${item.name} vào giỏ hàng` : `${item.name} đã hết hàng`}
+          aria-label={
+            !isAvailable
+              ? `${item.name} đã hết hàng`
+              : !onAddClick
+              ? `Cần xác nhận bàn trước khi thêm ${item.name}`
+              : `Thêm ${item.name} vào giỏ hàng`
+          }
+          title={!onAddClick ? 'Vui lòng xác nhận bàn để thêm món' : undefined}
         >
           <Plus className="w-5 h-5" aria-hidden="true" />
         </button>
