@@ -24,7 +24,6 @@ import {
   fetchCategories,
   MenuApiError,
 } from '../../../features/owner/api-client';
-import { MOCK_OWNER_MENU_VIEW } from '../../../lib/mocks/ui-preview';
 import { OwnerMenuItemForm } from './OwnerMenuItemForm';
 import { OwnerCategoryDialog } from './OwnerCategoryDialog';
 
@@ -76,16 +75,11 @@ const OwnerMenuSkeleton: React.FC = () => (
  * Hỗ trợ bố cục 65/35 trên Desktop và 1 cột trên Mobile/Tablet.
  */
 export const OwnerMenuView: React.FC = () => {
-  const isDev = process.env.NODE_ENV !== 'production';
-
   // Menu data states
-  const [categories, setCategories] = useState<CategoryItem[]>(
-    isDev ? MOCK_OWNER_MENU_VIEW.categories : []
-  );
-  const [items, setItems] = useState<OwnerMenuItem[]>(isDev ? MOCK_OWNER_MENU_VIEW.items : []);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [items, setItems] = useState<OwnerMenuItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isMockPreview, setIsMockPreview] = useState<boolean>(false);
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -122,25 +116,17 @@ export const OwnerMenuView: React.FC = () => {
         } else {
           setCategories(menuRes.value.categories);
         }
-        setIsMockPreview(false);
       } else {
         throw new Error('Không thể tải thực đơn');
       }
     } catch {
-      // Fallback dev preview nếu backend chưa chạy
-      if (isDev) {
-        setCategories(MOCK_OWNER_MENU_VIEW.categories);
-        setItems(MOCK_OWNER_MENU_VIEW.items);
-        setIsMockPreview(true);
-      } else {
-        setCategories([]);
-        setItems([]);
-        setErrorMessage('Không thể tải thực đơn chủ quán từ máy chủ.');
-      }
+      setCategories([]);
+      setItems([]);
+      setErrorMessage('Không thể tải thực đơn chủ quán từ máy chủ.');
     } finally {
       setIsLoading(false);
     }
-  }, [isDev]);
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -158,21 +144,14 @@ export const OwnerMenuView: React.FC = () => {
           } else {
             setCategories(menuRes.value.categories);
           }
-          setIsMockPreview(false);
         } else if (!ignore) {
           throw new Error('Không thể tải thực đơn');
         }
       } catch {
         if (!ignore) {
-          if (isDev) {
-            setCategories(MOCK_OWNER_MENU_VIEW.categories);
-            setItems(MOCK_OWNER_MENU_VIEW.items);
-            setIsMockPreview(true);
-          } else {
-            setCategories([]);
-            setItems([]);
-            setErrorMessage('Không thể tải thực đơn chủ quán từ máy chủ.');
-          }
+          setCategories([]);
+          setItems([]);
+          setErrorMessage('Không thể tải thực đơn chủ quán từ máy chủ.');
         }
       } finally {
         if (!ignore) {
@@ -184,7 +163,7 @@ export const OwnerMenuView: React.FC = () => {
     return () => {
       ignore = true;
     };
-  }, [isDev]);
+  }, []);
 
   // Xóa thông báo sau 3 giây
   useEffect(() => {
@@ -274,16 +253,6 @@ export const OwnerMenuView: React.FC = () => {
           type: 'error',
           message: err.error.message || `Không thể đổi trạng thái món "${item.name}".`,
         });
-      } else if (isDev) {
-        // Mock fallback chỉ trong môi trường dev
-        delete toggleRequestIdsRef.current[item.id];
-        setItems((prev) =>
-          prev.map((it) => (it.id === item.id ? { ...it, available: newAvailable } : it))
-        );
-        setNotification({
-          type: 'success',
-          message: `Đã đổi trạng thái "${item.name}" (chế độ Mock Preview Dev).`,
-        });
       } else {
         // Lỗi mạng: Giữ lại requestId để khi người dùng click lại sẽ replay cùng key (UI-02)
         setNotification({
@@ -343,11 +312,6 @@ export const OwnerMenuView: React.FC = () => {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-base sm:text-lg font-bold text-[#1D2522]">Quản lý Thực đơn</h2>
-            {isMockPreview && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#E8F4F0] text-[#1D725E] border border-[#C6E7DC]">
-                MOCK_PREVIEW
-              </span>
-            )}
           </div>
           <p className="text-xs text-[#727B77] mt-0.5">
             Cập nhật món ăn, điều chỉnh giá và bật/tắt nhanh tình trạng còn hàng.

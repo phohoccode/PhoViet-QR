@@ -21,10 +21,6 @@ import {
   submitCustomerOrder,
   OrderApiError,
 } from '@/features/orders/api-client';
-import {
-  DEV_MOCK_ORDER_DETAIL_ACCEPTED,
-  type DineInOrderDetail,
-} from './order-api';
 
 export type CheckoutSubmissionStatus =
   | 'idle'
@@ -53,6 +49,70 @@ export interface UseDineInCheckoutProps {
   isDemo?: boolean;
 }
 
+const PENDING_ORDER_STORAGE_PREFIX = 'pv_pending_order_';
+
+export interface PersistedPendingIntent {
+  qrCode: string;
+  clientRequestId: string;
+  menuRevision: string;
+  items: Array<{
+    menuItemId: string;
+    quantity: number;
+    optionIds: string[];
+    note: null; // Explicit privacy-safe: tuyệt đối không lưu ghi chú người dùng vào storage
+  }>;
+  timestamp: number;
+}
+
+function savePendingIntentToStorage(payload: CreateOrderV1Input): void {
+  if (typeof window === 'undefined' || !payload.qrCode) return;
+  try {
+    const safeIntent: PersistedPendingIntent = {
+      qrCode: payload.qrCode,
+      clientRequestId: payload.clientRequestId,
+      menuRevision: payload.menuRevision,
+      items: payload.items.map((it) => ({
+        menuItemId: it.menuItemId,
+        quantity: it.quantity,
+        optionIds: [...it.optionIds],
+        note: null,
+      })),
+      timestamp: Date.now(),
+    };
+    window.sessionStorage.setItem(
+      `${PENDING_ORDER_STORAGE_PREFIX}${payload.qrCode}`,
+      JSON.stringify(safeIntent)
+    );
+  } catch {
+    // Ignore storage quota / private browsing errors
+  }
+}
+
+function clearPendingIntentFromStorage(qrCode?: string): void {
+  if (typeof window === 'undefined' || !qrCode) return;
+  try {
+    window.sessionStorage.removeItem(`${PENDING_ORDER_STORAGE_PREFIX}${qrCode}`);
+  } catch {
+    // Ignore errors
+  }
+}
+
+function loadPendingIntentFromStorage(qrCode?: string): PersistedPendingIntent | null {
+  if (typeof window === 'undefined' || !qrCode) return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${PENDING_ORDER_STORAGE_PREFIX}${qrCode}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedPendingIntent;
+    if (Date.now() - parsed.timestamp > 15 * 60 * 1000) {
+      clearPendingIntentFromStorage(qrCode);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export function useDineInCheckout({
   qrCode,
   isTableVerified,
@@ -61,17 +121,57 @@ export function useDineInCheckout({
   clearCart,
   refreshCart,
   onOrderConfirmed,
-  isDemo = false,
 }: UseDineInCheckoutProps) {
-  const [status, setStatus] = useState<CheckoutSubmissionStatus>('idle');
-  const [confirmedOrder, setConfirmedOrder] = useState<OrderDetail | null>(null);
-  const [error, setError] = useState<CheckoutErrorState | null>(null);
-  const [clientRequestId, setClientRequestId] = useState<string | null>(null);
+  // Check on mount if there is a saved pending intent
+  const initialPendingIntent =
+    typeof window !== 'undefined' && qrCode
+      ? loadPendingIntentFromStorage(qrCode)
+      : null;
 
-  // Stable clientRequestId (UUID v4) giữ nguyên qua timeout / retry cùng intent (P3-C01)
-  const clientRequestIdRef = useRef<string | null>(null);
+  const [status, setStatus] = useState<CheckoutSubmissionStatus>(() =>
+    initialPendingIntent ? 'uncertain' : 'idle'
+  );
+  const [confirmedOrder, setConfirmedOrder] = useState<OrderDetail | null>(null);
+  const [error, setError] = useState<CheckoutErrorState | null>(() =>
+    initialPendingIntent
+      ? {
+          message:
+            'Có yêu cầu đặt món trước đó chưa xác nhận được kết quả. Hãy bấm "Kiểm tra lại / Thử lại" để kiểm tra với đúng mã yêu cầu ban đầu.',
+          canRetrySameKey: true,
+        }
+      : null
+  );
+  const [clientRequestId, setClientRequestId] = useState<string | null>(
+    () => initialPendingIntent?.clientRequestId || null
+  );
+  const [pendingPayload, setPendingPayload] = useState<CreateOrderV1Input | null>(() =>
+    initialPendingIntent
+      ? {
+          qrCode: initialPendingIntent.qrCode,
+          clientRequestId: initialPendingIntent.clientRequestId,
+          menuRevision: initialPendingIntent.menuRevision,
+          items: initialPendingIntent.items,
+          note: null,
+        }
+      : null
+  );
+
+  // Stable clientRequestId (UUID v4) giữ nguyên qua timeout / retry cùng intent (P3-C01/P3-C03)
+  const clientRequestIdRef = useRef<string | null>(
+    initialPendingIntent?.clientRequestId || null
+  );
   // Snapshot payload ban đầu để retry nếu kết nối bị đứt
-  const pendingPayloadRef = useRef<CreateOrderV1Input | null>(null);
+  const pendingPayloadRef = useRef<CreateOrderV1Input | null>(
+    initialPendingIntent
+      ? {
+          qrCode: initialPendingIntent.qrCode,
+          clientRequestId: initialPendingIntent.clientRequestId,
+          menuRevision: initialPendingIntent.menuRevision,
+          items: initialPendingIntent.items,
+          note: null,
+        }
+      : null
+  );
   // Khóa chống double-click: tái sử dụng promise đang thực thi
   const inFlightPromiseRef = useRef<Promise<void> | null>(null);
 
@@ -81,53 +181,25 @@ export function useDineInCheckout({
     clientRequestIdRef.current = null;
     pendingPayloadRef.current = null;
     setClientRequestId(null);
-  }, []);
+    setPendingPayload(null);
+    clearPendingIntentFromStorage(qrCode);
+  }, [qrCode]);
 
   const handleExecuteSubmit = useCallback(
     async (payload: CreateOrderV1Input) => {
       setStatus('submitting');
       setError(null);
-
-      // Chế độ demo chỉ áp dụng trong dev khi có cờ demo
-      if (isDemo && process.env.NODE_ENV !== 'production') {
-        // Giả lập network delay ngắn cho preview
-        await new Promise((r) => setTimeout(r, 600));
-        const mockOrder: DineInOrderDetail = {
-          ...DEV_MOCK_ORDER_DETAIL_ACCEPTED,
-          createdAt: new Date().toISOString(),
-          acceptedAt: new Date().toISOString(),
-          lines: payload.items.map((it, idx) => ({
-            id: `line-${idx + 1}`,
-            menuItemId: it.menuItemId,
-            name: `Món #${idx + 1}`,
-            baseUnitPriceVnd: 35000,
-            options: [],
-            unitPriceVnd: 35000,
-            quantity: it.quantity,
-            lineTotalVnd: 35000 * it.quantity,
-            note: it.note,
-          })),
-          totalVnd: payload.items.reduce((s, it) => s + 35000 * it.quantity, 0),
-          itemCount: payload.items.reduce((s, it) => s + it.quantity, 0),
-        };
-
-        clientRequestIdRef.current = null;
-        pendingPayloadRef.current = null;
-        setClientRequestId(null);
-        setConfirmedOrder(mockOrder);
-        setStatus('confirmed');
-        clearCart?.();
-        onOrderConfirmed?.(mockOrder);
-        return;
-      }
+      savePendingIntentToStorage(payload);
 
       try {
         const orderResult = await submitCustomerOrder(payload);
 
-        // Thành công: Hủy ID chờ, lưu đơn đã chốt và làm sạch giỏ hàng
+        // Thành công: Hủy ID chờ, xóa pending storage, lưu đơn đã chốt và làm sạch giỏ hàng
+        clearPendingIntentFromStorage(qrCode);
         clientRequestIdRef.current = null;
         pendingPayloadRef.current = null;
         setClientRequestId(null);
+        setPendingPayload(null);
         setConfirmedOrder(orderResult);
         setStatus('confirmed');
         clearCart?.();
@@ -139,6 +211,7 @@ export function useDineInCheckout({
 
           // Network/timeout/500 is UNCERTAIN: giữ nguyên immutable intent và key
           if (statusHttp >= 500 || code === 'INTERNAL_ERROR') {
+            savePendingIntentToStorage(payload);
             setStatus('uncertain');
             setError({
               code,
@@ -155,6 +228,7 @@ export function useDineInCheckout({
             statusHttp === 410 ||
             statusHttp === 403
           ) {
+            clearPendingIntentFromStorage(qrCode);
             // Giữ giỏ hàng an toàn, không xóa cart, dẫn khách về xác thực lại bàn
             setStatus('error');
             setError({
@@ -164,6 +238,7 @@ export function useDineInCheckout({
               canRetrySameKey: false,
             });
           } else if (code === 'SESSION_CHECKOUT_PENDING') {
+            clearPendingIntentFromStorage(qrCode);
             setStatus('error');
             setError({
               code,
@@ -172,6 +247,7 @@ export function useDineInCheckout({
               canRetrySameKey: false,
             });
           } else if (code === 'STORE_NOT_ACCEPTING_ORDERS') {
+            clearPendingIntentFromStorage(qrCode);
             setStatus('error');
             setError({
               code,
@@ -179,6 +255,7 @@ export function useDineInCheckout({
               canRetrySameKey: false,
             });
           } else if (code === 'INVALID_STATE_TRANSITION') {
+            clearPendingIntentFromStorage(qrCode);
             setStatus('error');
             setError({
               code,
@@ -192,9 +269,11 @@ export function useDineInCheckout({
             code === 'VALIDATION_ERROR'
           ) {
             // Thực đơn đã thay đổi: Hủy clientRequestId vì payload cần được người dùng duyệt lại
+            clearPendingIntentFromStorage(qrCode);
             clientRequestIdRef.current = null;
             pendingPayloadRef.current = null;
             setClientRequestId(null);
+            setPendingPayload(null);
             setStatus('error');
             setError({
               code,
@@ -210,6 +289,7 @@ export function useDineInCheckout({
             // Tự động làm mới thực đơn để giỏ hàng reconcile
             void refreshCart?.();
           } else if (code === 'DUPLICATE_REQUEST_CONFLICT') {
+            clearPendingIntentFromStorage(qrCode);
             setStatus('error');
             setError({
               code,
@@ -227,6 +307,7 @@ export function useDineInCheckout({
               retryAfterSeconds: waitSec,
             });
           } else {
+            clearPendingIntentFromStorage(qrCode);
             setStatus('error');
             setError({
               code,
@@ -237,6 +318,7 @@ export function useDineInCheckout({
         } else {
           // Lỗi mạng hoặc TypeError / Timeout: Không thể xác định kết quả phía server!
           // Vào trạng thái UNCERTAIN, bảo lưu nguyên vẹn clientRequestId và payload
+          savePendingIntentToStorage(payload);
           setStatus('uncertain');
           setError({
             message:
@@ -246,14 +328,35 @@ export function useDineInCheckout({
         }
       }
     },
-    [clearCart, isDemo, onOrderConfirmed, refreshCart]
+    [clearCart, onOrderConfirmed, qrCode, refreshCart]
   );
+
+  const retryUncertainOrder = useCallback(async () => {
+    if (inFlightPromiseRef.current) {
+      return inFlightPromiseRef.current;
+    }
+    if (!pendingPayloadRef.current) {
+      return;
+    }
+    const promise = handleExecuteSubmit(pendingPayloadRef.current);
+    inFlightPromiseRef.current = promise;
+    try {
+      await promise;
+    } finally {
+      inFlightPromiseRef.current = null;
+    }
+  }, [handleExecuteSubmit]);
 
   const submitOrder = useCallback(async () => {
     if (inFlightPromiseRef.current) {
       return inFlightPromiseRef.current;
     }
     if (status === 'submitting') return;
+
+    // F01: Khi đang ở trạng thái UNCERTAIN, KHÔNG tạo request ID mới! Chuyển thẳng sang retry
+    if (status === 'uncertain' && pendingPayloadRef.current) {
+      return retryUncertainOrder();
+    }
 
     if (isTakeaway) {
       setStatus('error');
@@ -313,6 +416,7 @@ export function useDineInCheckout({
       note: draftResult.value.note ?? null,
     };
     pendingPayloadRef.current = payload;
+    setPendingPayload(payload);
 
     const promise = handleExecuteSubmit(payload);
     inFlightPromiseRef.current = promise;
@@ -327,33 +431,21 @@ export function useDineInCheckout({
     isTakeaway,
     prepareOrderDraft,
     qrCode,
+    retryUncertainOrder,
     status,
   ]);
-
-  const retryUncertainOrder = useCallback(async () => {
-    if (inFlightPromiseRef.current) {
-      return inFlightPromiseRef.current;
-    }
-    if (!pendingPayloadRef.current) {
-      await submitOrder();
-      return;
-    }
-    const promise = handleExecuteSubmit(pendingPayloadRef.current);
-    inFlightPromiseRef.current = promise;
-    try {
-      await promise;
-    } finally {
-      inFlightPromiseRef.current = null;
-    }
-  }, [handleExecuteSubmit, submitOrder]);
 
   return {
     status,
     confirmedOrder,
     error,
     clientRequestId,
+    pendingPayload,
     submitOrder,
     retryUncertainOrder,
     resetCheckout,
   };
 }
+
+export type DineInCheckoutInstance = ReturnType<typeof useDineInCheckout>;
+

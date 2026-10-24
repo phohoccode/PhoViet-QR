@@ -10,7 +10,7 @@
  * - Hai nút hành động chính: "Theo dõi tiến độ đơn" và "Gọi thêm món" (quay lại menu với giỏ mới).
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   CheckCircle2,
@@ -22,6 +22,10 @@ import {
 } from 'lucide-react';
 import type { OrderDetail } from '../../../../docs/contracts/types';
 import { ORDER_STATUS_LABELS } from '../../../../docs/contracts/types';
+import {
+  saveActiveOrderSummary,
+  type ActiveOrderSummary,
+} from './active-order-storage';
 
 export interface OrderConfirmedViewProps {
   order: OrderDetail;
@@ -41,6 +45,23 @@ export const OrderConfirmedView: React.FC<OrderConfirmedViewProps> = ({
   className = '',
 }) => {
   const router = useRouter();
+
+  // Đồng bộ lưu trữ và broadcast ngay khi màn hình xác nhận đơn hiển thị
+  useEffect(() => {
+    if (order) {
+      const summary: ActiveOrderSummary = {
+        id: order.id,
+        ticketNo: order.ticketNo ?? 0,
+        status: order.status,
+        itemCount: order.itemCount,
+        totalVnd: order.totalVnd,
+        tableLabel: order.table ? order.table.label : tableLabel,
+        updatedAt: new Date().toISOString(),
+      };
+      saveActiveOrderSummary(summary, qrCode);
+    }
+  }, [order, qrCode, tableLabel]);
+
   const formattedTicketNo =
     order.ticketNo !== null && order.ticketNo !== undefined
       ? `#${String(order.ticketNo).padStart(3, '0')}`

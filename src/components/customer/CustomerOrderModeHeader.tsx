@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Store, ShoppingBag } from 'lucide-react';
+import { Store, ShoppingBag, CheckCircle2 } from 'lucide-react';
 import type { StoreView, OrderType } from '../../../docs/contracts/types';
 import { CustomerModeBadge } from './CustomerModeBadge';
 
@@ -12,6 +12,7 @@ interface CustomerOrderModeHeaderProps {
   cartItemCount?: number;
   onOpenCart?: () => void;
   activeOrderTicket?: number | null;
+  activeOrderStatus?: string | null;
   onTrackOrder?: () => void;
   className?: string;
 }
@@ -31,6 +32,7 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
   cartItemCount = 0,
   onOpenCart,
   activeOrderTicket,
+  activeOrderStatus,
   onTrackOrder,
   className = '',
 }) => {
@@ -38,6 +40,9 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
   const subtitle = isDineIn
     ? 'Đặt món trực tiếp tại bàn'
     : 'Đặt và thanh toán trước — nhận món tại quầy';
+
+  const isCompleted = activeOrderStatus === 'completed';
+  const isReady = activeOrderStatus === 'ready';
 
   return (
     <header
@@ -65,10 +70,20 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
           <button
             type="button"
             onClick={onTrackOrder}
-            className="h-10 px-2.5 rounded-xl bg-[#E8F4F0] border border-[#35977D]/30 text-[#1D725E] hover:bg-[#1D725E] hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs active:scale-95"
+            className={`h-10 px-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs active:scale-95 ${
+              isCompleted
+                ? 'bg-[#ECFDF3] border border-[#ABEFC6] text-[#027A48] hover:bg-[#D1FADF]'
+                : isReady
+                ? 'bg-[#EFF8FF] border border-[#B2DDFF] text-[#175CD3] hover:bg-[#D1E9FF]'
+                : 'bg-[#E8F4F0] border border-[#35977D]/30 text-[#1D725E] hover:bg-[#1D725E] hover:text-white'
+            }`}
             aria-label={`Theo dõi đơn hàng số #${String(activeOrderTicket).padStart(3, '0')}`}
           >
-            <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+            {isCompleted ? (
+              <CheckCircle2 className="w-3.5 h-3.5 text-[#027A48]" aria-hidden="true" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
+            )}
             <span>#{String(activeOrderTicket).padStart(3, '0')}</span>
           </button>
         ) : null}

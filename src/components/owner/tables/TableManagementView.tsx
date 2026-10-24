@@ -24,6 +24,7 @@ import { TableQrModal } from './TableQrModal';
 import { TableSessionOpenedDialog, TableDetailDialog } from '../TableSessionDialog';
 import { OwnerErrorState } from '../OwnerErrorState';
 import { OwnerEmptyState } from '../OwnerEmptyState';
+import { TablesGridSkeleton } from '../OwnerTabSkeletons';
 
 export interface TableManagementViewProps {
   tables: OwnerTable[];
@@ -34,6 +35,10 @@ export interface TableManagementViewProps {
   onRefresh?: () => void;
   onTableCreated?: (table: OwnerTable, createdQrPath?: string | null) => void;
   onTableUpdated?: (table: OwnerTable) => void;
+  // P2-HF01 PIN lifecycle props
+  onRevealTablePin?: (tableId: string) => Promise<{ pin: string; isLegacy?: boolean }>;
+  onRotateTablePin?: (tableId: string) => Promise<{ pin: string }>;
+  onMigrateLegacyTablePin?: (tableId: string) => Promise<{ pin: string }>;
 }
 
 /**
@@ -52,6 +57,9 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
   onRefresh,
   onTableCreated,
   onTableUpdated,
+  onRevealTablePin,
+  onRotateTablePin,
+  onMigrateLegacyTablePin,
 }) => {
   // Bộ lọc & tìm kiếm
   const [searchQuery, setSearchQuery] = useState('');
@@ -374,8 +382,10 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
         </div>
       )}
 
-      {/* 3. Lưới các bàn phục vụ */}
-      {!isLoading && !errorMessage && filteredTables.length > 0 && (
+      {/* 3. Lưới các bàn phục vụ hoặc Skeleton */}
+      {isLoading ? (
+        <TablesGridSkeleton />
+      ) : !errorMessage && filteredTables.length > 0 ? (
         <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pt-1">
           {filteredTables.map((t) => {
             const isOccupied = t.session !== null;
@@ -585,7 +595,7 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
             );
           })}
         </div>
-      )}
+      ) : null}
 
       {/* =====================================================================
           HỘP THOẠI MODAL (Add / Edit / QR / Session Detail)
@@ -649,7 +659,7 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
         />
       )}
 
-      {/* Modal Chi tiết phiên bàn (Xem bill, trạng thái thanh toán) */}
+      {/* Modal Chi tiết phiên bàn (Xem bill, trạng thái thanh toán & PIN) */}
       {selectedTableForDetail && (
         <TableDetailDialog
           table={selectedTableForDetail}
@@ -659,6 +669,24 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
             ) ?? selectedTableForDetail.qr
           }
           onClose={() => setSelectedTableForDetail(null)}
+          onSessionUpdated={(tableId, pinView) => {
+            const targetTable = tables.find((t) => t.id === tableId);
+            if (targetTable && targetTable.session) {
+              onTableUpdated?.({
+                ...targetTable,
+                session: {
+                  ...targetTable.session,
+                  version: pinView.sessionVersion,
+                  pinState: 'active',
+                },
+              });
+            }
+            onRefresh?.();
+          }}
+          onRefresh={onRefresh}
+          onRevealPin={onRevealTablePin}
+          onRotatePin={onRotateTablePin}
+          onMigrateLegacyPin={onMigrateLegacyTablePin}
         />
       )}
     </div>

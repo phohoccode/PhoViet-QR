@@ -97,3 +97,7 @@ OwnerSessionOpenedView.sessionCredential và PrivateOrderTrackingView.pickup là
 ## Ví dụ ba khách cùng bàn
 
 Owner mở phiên `session-05` ở Bàn 05. Ba thiết bị A/B/C verify cùng mã phiên nhưng nhận ba GuestAccess riêng, scope đều là session-05. A gửi order-A được DB chấp nhận lúc `2026-10-23T03:00:00Z`, ticket 28; một takeaway đã verified xen giữa nhận 29; B gửi order-B nhận 30 lúc `03:00:02Z`; C gửi order-C nhận 31 lúc `03:00:03Z`. Tất cả ba dine-in đều tableSessionId=session-05, nhưng mỗi order một ticket riêng. Nếu tổng của A/B/C là 29.000/58.000/35.000 VND thì bill bàn là 122.000 VND; takeaway 29 không thuộc bill này. A retry cùng key/payload vẫn là order-A/ticket 28. Cả ba có thể đọc đơn cùng phiên, không đọc takeaway xen giữa. `EXAMPLES.md` dùng snapshot hai order trước khi C gọi thêm.
+
+## P2-HF01 table PIN amendment
+
+For table sessions only, the earlier hash/delivery assumptions are superseded by six-digit PIN policy: code_hash stores a peppered HMAC bound to store/session/generation; pin_key_id, pin_generation and pin_issued_at distinguish legacy sessions. Ciphertext stays in session_code_deliveries (pin_generation, key_id, IV/tag/ciphertext); no plaintext column. OwnerTablePinView is an additional private owner projection for explicit reveal/rotate; no list/public code. Existing guest scopes/orders survive rotation; close revokes as before. PickupCredential policy is unchanged.

@@ -34,10 +34,12 @@ export function encryptCode(code: string, keyId: string, aad: string): Encrypted
 export function decryptCode(value: unknown, keyId: string, aad: string): string {
   try {
     const artifact = artifactSchema.parse(value);
-    const decipher = createDecipheriv("aes-256-gcm", encryptionKey(keyId), Buffer.from(artifact.iv, "base64"));
+    const iv = Buffer.from(artifact.iv, "base64"), tag = Buffer.from(artifact.tag, "base64"), ciphertext = Buffer.from(artifact.ciphertext, "base64");
+    if (iv.length !== 12 || tag.length !== 16 || iv.toString("base64") !== artifact.iv || tag.toString("base64") !== artifact.tag || ciphertext.toString("base64") !== artifact.ciphertext) throw new Error();
+    const decipher = createDecipheriv("aes-256-gcm", encryptionKey(keyId), iv);
     decipher.setAAD(Buffer.from(aad));
-    decipher.setAuthTag(Buffer.from(artifact.tag, "base64"));
-    return Buffer.concat([decipher.update(Buffer.from(artifact.ciphertext, "base64")), decipher.final()]).toString("utf8");
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
   } catch { throw new ApiFault("INTERNAL_ERROR"); }
 }
 export const sessionAad = (store: string, table: string, session: string, actor: string, request: string) =>

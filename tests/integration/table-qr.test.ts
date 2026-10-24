@@ -26,6 +26,8 @@ beforeAll(async () => {
   process.env.APP_BASE_URL = "https://qr.example.invalid";
   process.env.TABLE_SESSION_ENCRYPTION_KEYS = JSON.stringify({ v1: randomBytes(32).toString("base64") });
   process.env.TABLE_SESSION_ACTIVE_KEY_ID = "v1";
+  process.env.TABLE_PIN_HMAC_KEYS = JSON.stringify({ v1: randomBytes(32).toString("base64") });
+  process.env.TABLE_PIN_ACTIVE_HMAC_KEY_ID = "v1";
   for (let i = 0; i < 3; i++) {
     const r = await admin.auth.admin.createUser({ email: `tables-${randomUUID()}@example.invalid`, password: `${randomUUID()}aA!9`, email_confirm: true });
     if (r.error || !r.data.user) throw Error("Local Auth setup failed");
@@ -38,6 +40,9 @@ beforeEach(() => {
   sql(`delete from public.security_rate_buckets where key_hash in(select encode(extensions.digest(k,'sha256'),'hex') from unnest(array[${users.flatMap(id => [`'owner:${id}:read'`, `'owner:${id}:write'`]).join(",")}]::text[]) k)`);
 });
 afterAll(async () => {
+  const qrIds: string[] = JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id in('${stores.join("','")}')`));
+  const pinKeys = qrIds.flatMap(id => [`pin-table-burst:${id}`, `pin-table-minute:${id}`, ...hashes.map(h => `pin-device-burst:${h}:${id}`)]);
+  sql(`delete from public.security_rate_buckets where key_hash in(select encode(extensions.digest(k,'sha256'),'hex') from unnest(array[${pinKeys.map(k => `'${k}'`).join(",")}]::text[]) k)`);
   // Local postgres only: bypass immutable-history triggers for these random fixtures.
   sql(`begin;set local session_replication_role=replica;
     delete from public.guest_access where store_id in('${stores.join("','")}');

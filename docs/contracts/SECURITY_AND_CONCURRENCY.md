@@ -21,7 +21,7 @@ Cập nhật 23/10/2026. Đây là đặc tả và **test plan**, không có DB/
 | Backend expiry/reconciliation worker | Intent/ledger/order/outbox | Expire, giữ evidence, retry publish | Server env/service credentials, cùng locks/constraints. Default webhook-only release, sync không tự queue trước chốt Q1 |
 | Realtime subscriber | Owner store / guest order hoặc session | Nhận invalidation và fetch snapshot | Private authorization đúng grant/owner, token realtime hạn ngắn nếu dùng; server recheck. Không public broadcast đơn/mã nhận |
 
-Cookie bundle là transport chứa server-side mapping **nhiều grant độc lập**, không mở rộng scope thành quán. Hash/token/value không có trong JSON DTO, URL hoặc localStorage. Rotating session code phải tăng credential generation và vô hiệu credential cũ; policy **ASSUMPTION** revoke các grant phiên hiện hữu khi rotate rồi verify lại, giữ nguyên order/ticket. Không có endpoint rotate ở draft, CR-UI-05 phải chốt trước bật nút.
+Cookie bundle là transport chứa server-side mapping **nhiều grant độc lập**, không mở rộng scope thành quán. Hash/token/value không có trong JSON DTO, URL hoặc localStorage. P2-HF01 thay chính sách cũ: rotate PIN tăng generation/version, vô hiệu PIN cũ ngay và **giữ nguyên guest grants đã verify**, sessionId và orders. Close vẫn revoke mọi grant. Reveal/rotate là POST owner-only có CSRF/audit; không có revoke-all mới. Tham chiếu R12/P2_HF01_CODEX_PIN_HANDOFF.md.
 
 ## 2. Credential và ranh giới dữ liệu
 
@@ -143,3 +143,7 @@ Các profile là đề xuất cần tune load test, không số SLA đã đo. Tr
 | S35 | DB lỗi giữa ledger success và counter update | 500 webhook retry; rollback mọi domain write | Không paid/no ticket hoặc ticket/no paid; dedupe không đánh processed sớm |
 
 Test implementation cần DB sạch có constraints, transaction contention harness, provider sandbox/signature fixtures đúng vendor, log redaction assertion và browser auth/cookie tests. Kiểm tĩnh examples/types ở P0-C02 chỉ chứng minh artifact nhất quán, không thay các ca trên.
+
+## P2-HF01 credential policy (2026-10-24, overrides earlier session-code assumptions)
+
+Table PIN is exactly six ASCII digits, CSPRNG,24h maximum session lifetime; guest credential remains256-bit opaque HttpOnly cookie with scoped grant<=12h. PIN is not a guest token. Legacy long-code sessions are not silently converted; owner rotate explicitly provisions PIN in the same session, existing grants persist. Old long-code verify is disabled on the new server. New grants require open (not checkout_pending). PIN verifier reuses code_hash with HMAC-SHA256(store/session/generation/PIN); ciphertext reuses session_code_deliveries, with12-byte IV/16-byte GCM tag. Service-only constant-work comparison runs under session lock after durable rate limits. Owner reveal audits no value; no public/list payload contains the secret. Existing Q5 pickup assumptions remain unchanged; this hotfix resolves table PIN delivery only.

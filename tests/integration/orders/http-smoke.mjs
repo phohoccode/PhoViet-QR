@@ -4,17 +4,18 @@ import { execFileSync, spawn } from "node:child_process";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import http from "node:http";
 import { createClient } from "@supabase/supabase-js";
+import { pinRateKeys } from "../pin-rate-fixtures.mjs";
 const status = JSON.parse(execFileSync(process.execPath, ["node_modules/supabase/dist/supabase.js", "status", "-o", "json"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
 assert.equal(status.API_URL, "http://127.0.0.1:15421");
 const admin = createClient(status.API_URL, status.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 const sql = input => execFileSync("docker", ["exec", "-i", "supabase_db_qr-ordering-p1c02-local", "psql", "-U", "postgres", "-d", "postgres", "-Atq", "-v", "ON_ERROR_STOP=1"], { input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }).trim();
 const base = "http://localhost:13007", store = randomUUID(), password = randomUUID() + "aA!9", email = `p3-http-${randomUUID()}@example.invalid`;
-const secrets = [status.SERVICE_ROLE_KEY, password, email], owner = new Map(), guest = new Map(), outsider = new Map();
+const secrets = [status.SERVICE_ROLE_KEY, password, email], owner = new Map(), guest = new Map(), outsider = new Map(), secondDevice = new Map();
 const hashes = new Set(); let user, server, logs = "";
 const extraUsers = [], extraStore = randomUUID();
 const env = { ...process.env, OWNER_BOOTSTRAP_ENABLED: "false", APP_ORIGIN: base, APP_BASE_URL: "https://qr.example.invalid",
   NEXT_PUBLIC_SUPABASE_URL: status.API_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.PUBLISHABLE_KEY || status.ANON_KEY,
-  SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY, TABLE_SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_SESSION_ACTIVE_KEY_ID: "v1" };
+  SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY, TABLE_SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_SESSION_ACTIVE_KEY_ID: "v1", TABLE_PIN_HMAC_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_PIN_ACTIVE_HMAC_KEY_ID: "v1" };
 async function call(path, jar = guest, method = "GET", body, overrides = {}) {
   const headers = { Accept: "application/json", ...(method === "GET" ? {} : { origin: base, "content-type": "application/json" }),
     ...(jar.size ? { cookie: [...jar].map(([k,v]) => `${k}=${v}`).join("; ") } : {}), ...overrides };
@@ -56,15 +57,41 @@ try {
   const counter = await ok("/api/owner/qr-codes", owner, "POST", { ...key(), action: "create", type: "takeaway", tableId: null }, 201);
   const category = await ok("/api/owner/menu/categories", owner, "POST", { ...key(), name: "Drinks", sortOrder: 0, active: true }, 201);
   const item = await ok("/api/owner/menu", owner, "POST", { ...key(), categoryId: category.id, name: "Coffee", description: null, priceVnd: 29000, imageUrl: null, available: true, active: true, options: [{ name: "Milk", priceDeltaVnd: 3000, available: true }] }, 201);
+  const secondItem = await ok("/api/owner/menu", owner, "POST", { ...key(), categoryId: category.id, name: "Cake", description: null, priceVnd: 38000, imageUrl: null, available: true, active: true, options: [] }, 201);
   const opened = await ok(`/api/owner/tables/${table.id}/sessions`, owner, "POST", key(), 201); secrets.push(opened.sessionCredential.sessionCode);
   await ok(`/api/public/qr/${table.qr.publicCode}`, guest); const menu = await ok(`/api/public/menu?qrCode=${table.qr.publicCode}`, guest);
-  const input = { qrCode: table.qr.publicCode, clientRequestId: randomUUID(), menuRevision: menu.menuRevision, items: [{ menuItemId: item.id, quantity: 2, optionIds: [item.options[0].id], note: "Private fixture note" }], note: null };
+  const input = { qrCode: table.qr.publicCode, clientRequestId: randomUUID(), menuRevision: menu.menuRevision, items: [{ menuItemId: item.id, quantity: 2, optionIds: [item.options[0].id], note: "Private fixture note" }, { menuItemId: secondItem.id, quantity: 1, optionIds: [], note: null }], note: null };
   secrets.push("Private fixture note");
   await fail("/api/public/orders", new Map(), "POST", input, 401, "UNAUTHORIZED");
   await fail("/api/public/orders", guest, "POST", input, 403, "SESSION_REQUIRED");
+  const wrongPin = opened.sessionCredential.sessionCode === "000000" ? "000001" : "000000";
+  await fail("/api/public/table-sessions/verify", outsider, "POST", { qrCode: input.qrCode, sessionCode: wrongPin }, 422, "INVALID_SESSION_CODE");
+  await fail("/api/public/orders", outsider, "POST", { ...input, clientRequestId: randomUUID() }, 403, "SESSION_REQUIRED");
   await ok("/api/public/table-sessions/verify", guest, "POST", { qrCode: input.qrCode, sessionCode: opened.sessionCredential.sessionCode });
-  const order = await ok("/api/public/orders", guest, "POST", input, 201);
-  assert.equal(order.totalVnd, 64000); assert.equal(order.ticketNo, 1); assert.equal(order.status, "accepted"); assert.equal(order.payment.status, "unpaid");
+  const rotated = await ok(`/api/owner/table-sessions/${opened.session.id}/pin/rotate`, owner, "POST", { ...key(), expectedVersion: opened.session.version, confirm: true });
+  secrets.push(rotated.pin);
+  await fail("/api/public/table-sessions/verify", secondDevice, "POST", { qrCode: input.qrCode, sessionCode: opened.sessionCredential.sessionCode }, 422, "INVALID_SESSION_CODE");
+  await fail("/api/public/orders", secondDevice, "POST", { ...input, clientRequestId: randomUUID() }, 403, "SESSION_REQUIRED");
+  assert.equal(sql(`select count(*) from public.orders where store_id='${store}'`), "0");
+  assert.equal(sql(`select count(*) from public.ticket_counters where store_id='${store}'`), "0");
+  await ok("/api/public/table-sessions/verify", secondDevice, "POST", { qrCode: input.qrCode, sessionCode: rotated.pin });
+  assert.equal((await ok(`/api/public/qr/${input.qrCode}`, new Map(guest))).requiresSessionCode, false);
+  assert.equal((await ok(`/api/public/qr/${counter.publicCode}`, outsider)).requiresSessionCode, false);
+  assert.equal((await ok(`/api/public/menu?qrCode=${counter.publicCode}`, outsider)).items.length, 2);
+  // The grant issued before rotation remains valid; twenty real HTTP requests
+  // traverse one production Next server and one PostgreSQL command transaction.
+  const creates = await Promise.all(Array.from({ length: 20 }, () => ok("/api/public/orders", guest, "POST", input, 201)));
+  const order = creates[0]; creates.forEach(value => assert.deepEqual(value, order));
+  assert.equal(sql(`select count(*) from public.orders where store_id='${store}'`), "1");
+  assert.equal(sql(`select sum(last_ticket) from public.ticket_counters where store_id='${store}'`), "1");
+  assert.equal(order.totalVnd, 102000); assert.equal(order.itemCount, 3); assert.equal(order.lines.length, 2);
+  assert.equal(order.lines[0].unitPriceVnd, 32000); assert.equal(order.lines[0].options[0].name, "Milk");
+  assert.equal(order.lines[1].lineTotalVnd, 38000);
+  assert.equal(order.ticketNo, 1); assert.equal(order.status, "accepted"); assert.equal(order.payment.status, "unpaid");
+  assert.deepEqual(await ok(`/api/public/orders/${order.id}`, secondDevice), order);
+  await fail(`/api/public/orders/${order.id}?includePickup=true`, secondDevice, "GET", undefined, 403, "FORBIDDEN");
+  await fail("/api/public/orders", secondDevice, "POST", input, 403, "FORBIDDEN");
+  console.log("PASS P3-C03 PIN rotation retains old grant; wrong/old PIN has no grant/order/ticket; reload/multidevice scope; counter menu; two snapshots; 20 concurrent HTTP creates = one ticket");
   assert.deepEqual(await ok("/api/public/orders", guest, "POST", input, 201), order);
   assert.deepEqual(await ok(`/api/public/orders/${order.id}`, guest), order);
   assert.deepEqual(await ok(`/api/public/orders/${order.id}?includePickup=true`, guest), { order, pickup: null });
@@ -173,12 +200,13 @@ try {
   const orderIds = JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.orders where store_id='${store}'`));
   const qrIds = JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id='${store}'`));
   const rateKeys = [...(user ? [`owner:${user}:read`, `owner:${user}:write`] : []),
+    ...pinRateKeys(qrIds, [...hashes]),
     ...[...hashes].flatMap(hash => [`order-create:${hash}:${store}`, ...orderIds.map(id => `order-read:${hash}:${id}`), ...qrIds.flatMap(id => [`read:${hash}:${id}`, `verify:${hash}:${id}`])]),
     ...qrIds.map(id => `verify-qr:${id}`)];
   sql(`begin;set local session_replication_role=replica;
    delete from public.outbox_events where aggregate_id in(select id from public.orders where store_id='${store}' union all select id from public.table_sessions where store_id='${store}' union all select id from public.stores where id='${store}');
    delete from public.order_events where store_id='${store}';delete from public.order_requests where store_id='${store}';delete from public.order_items where store_id='${store}';delete from public.orders where store_id='${store}';delete from public.ticket_counters where store_id='${store}';
-   delete from public.operation_requests where store_id='${store}';delete from public.table_qr_audit_log where store_id='${store}';delete from public.menu_audit_log where store_id='${store}';delete from public.guest_access where store_id='${store}';delete from public.session_code_deliveries where session_id in(select id from public.table_sessions where store_id='${store}');delete from public.table_sessions where store_id='${store}';
+   delete from public.operation_requests where store_id='${store}';delete from public.table_pin_audit_log where store_id='${store}';delete from public.table_qr_audit_log where store_id='${store}';delete from public.menu_audit_log where store_id='${store}';delete from public.guest_access where store_id='${store}';delete from public.session_code_deliveries where session_id in(select id from public.table_sessions where store_id='${store}');delete from public.table_sessions where store_id='${store}';
    delete from public.menu_item_options where store_id='${store}';delete from public.menu_items where store_id='${store}';delete from public.menu_categories where store_id='${store}';delete from public.qr_codes where store_id='${store}';delete from public.dining_tables where store_id='${store}';delete from public.owner_members where store_id='${store}';delete from public.stores where id='${store}';
    delete from public.guest_browser_contexts where token_hash in('${[...hashes].join("','")}');
    delete from public.security_rate_buckets where key_hash in(select encode(extensions.digest(k,'sha256'),'hex') from unnest(array[${rateKeys.map(k => `'${k}'`).join(",")}]::text[]) k);commit;`);

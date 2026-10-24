@@ -41,6 +41,8 @@ beforeAll(async () => {
   process.env.APP_BASE_URL = "https://qr.example.invalid";
   process.env.TABLE_SESSION_ENCRYPTION_KEYS = JSON.stringify({ v1: randomBytes(32).toString("base64") });
   process.env.TABLE_SESSION_ACTIVE_KEY_ID = "v1";
+  process.env.TABLE_PIN_HMAC_KEYS = JSON.stringify({ v1: randomBytes(32).toString("base64") });
+  process.env.TABLE_PIN_ACTIVE_HMAC_KEY_ID = "v1";
   const r = await admin.auth.admin.createUser({ email: `p2-flow-${randomUUID()}@example.invalid`, password: `${randomUUID()}aA!9`, email_confirm: true });
   if (r.error || !r.data.user) throw Error("Local fixture Auth failed");
   users.push(r.data.user.id);
@@ -52,6 +54,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  const qrIds: string[] = JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id='${storeId}'`));
+  const pinKeys = qrIds.flatMap(id => [`pin-table-burst:${id}`, `pin-table-minute:${id}`, ...browsers.map(h => `pin-device-burst:${h}:${id}`)]);
+  sql(`delete from public.security_rate_buckets where key_hash in(select encode(extensions.digest(k,'sha256'),'hex') from unnest(array[${pinKeys.map(k => `'${k}'`).join(",")}]::text[]) k)`);
   // Only random fixtures on the asserted local Supabase; never real resources.
   sql(`begin;set local session_replication_role=replica;
     delete from public.security_rate_buckets where key_hash in(
@@ -153,7 +158,7 @@ it("concurrent verify/resolve versus fixture close leaves no surviving grant or 
       concurrentSql(`begin;update public.table_sessions set status='checkout_pending' where id='${session.session.id}';update public.table_sessions set status='closed' where id='${session.session.id}';commit;`),
     ]);
     expect(results[2].status).toBe("fulfilled");
-    for (const result of results.slice(0, 2)) if (result.status === "rejected") expect(result.reason).toMatchObject({ code: "SESSION_EXPIRED" });
+    for (const result of results.slice(0, 2)) if (result.status === "rejected") expect(["SESSION_EXPIRED", "SESSION_CHECKOUT_PENDING"]).toContain(result.reason.code);
     expect(sql(`select count(*) from public.guest_access where scope_id='${session.session.id}' and revoked_at is null`)).toBe("0");
     expect(sql(`select count(*) from public.session_code_deliveries where session_id='${session.session.id}'`)).toBe("0");
     expect(await resolvePublicQr(target.qr!.publicCode, guest)).toMatchObject({ requiresSessionCode: true, session: null });

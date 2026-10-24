@@ -19,11 +19,15 @@ export async function POST(
     noQuery(request);
     const owner = await requireApiOwner();
     const input = await readJson(request, openSessionInput);
-    return apiSuccess(
+    const response = apiSuccess(
       await openTableSession(owner, (await params).id, input),
       201,
     );
+    response.headers.set("Vary", "Cookie, Origin");
+    return response;
   } catch (error) {
-    return apiFailure(error);
+    const response = apiFailure(error);
+    response.headers.set("Vary", "Cookie, Origin");
+    return response;
   }
 }

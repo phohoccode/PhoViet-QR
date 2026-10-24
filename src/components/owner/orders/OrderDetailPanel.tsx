@@ -17,6 +17,8 @@ import {
 import type { OrderDetail } from '../../../../docs/contracts/types';
 import { OwnerStatusBadge } from '../OwnerStatusBadge';
 
+import { OrderDetailSkeleton } from '../OwnerTabSkeletons';
+
 export interface OrderDetailPanelProps {
   order: OrderDetail | null;
   isLoadingDetail?: boolean;
@@ -47,14 +49,7 @@ export const OrderDetailPanel: React.FC<OrderDetailPanelProps> = ({
   className = '',
 }) => {
   if (isLoadingDetail && !order) {
-    return (
-      <div
-        className={`h-full flex flex-col items-center justify-center p-8 text-center bg-white rounded-2xl border border-[#E9ECEA] ${className}`}
-      >
-        <Loader2 className="w-8 h-8 text-[#1D725E] animate-spin mb-3" aria-hidden="true" />
-        <p className="text-sm font-semibold text-[#1D2522]">Đang tải chi tiết đơn hàng...</p>
-      </div>
-    );
+    return <OrderDetailSkeleton className={className} />;
   }
 
   if (!order) {

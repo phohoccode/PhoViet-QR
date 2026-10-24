@@ -3,6 +3,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { hashSecret, newBrowserToken } from "../../src/server/security/crypto";
+import { pinVerifier } from "../../src/server/table-sessions/pin-crypto";
+import { pinRateKeys } from "./pin-rate-fixtures.mjs";
 import { resolvePublicQr, listOwnerQrCodes } from "../../src/server/qr/service";
 import { openTableSession, listOwnerTables, verifyTableSession, requireGuestTableSession } from "../../src/server/table-sessions/service";
 
@@ -25,6 +27,8 @@ beforeAll(async () => {
   process.env.SUPABASE_SERVICE_ROLE_KEY = status.SERVICE_ROLE_KEY;
   process.env.TABLE_SESSION_ENCRYPTION_KEYS = JSON.stringify({ v1: randomBytes(32).toString("base64") });
   process.env.TABLE_SESSION_ACTIVE_KEY_ID = "v1";
+  process.env.TABLE_PIN_HMAC_KEYS = JSON.stringify({ v1: randomBytes(32).toString("base64") });
+  process.env.TABLE_PIN_ACTIVE_HMAC_KEY_ID = "v1";
   for (let i = 0; i < 3; i++) {
     const result = await admin.auth.admin.createUser({ email: `qr-${randomUUID()}@example.invalid`, password: fixturePassword, email_confirm: true });
     if (result.error || !result.data.user) throw new Error("Test Auth bootstrap failed");
@@ -38,6 +42,7 @@ beforeAll(async () => {
 afterAll(async () => {
   const qrIds=JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id in('${stores.join("','")}')`)) as string[];
   const buckets = [
+    ...pinRateKeys(qrIds, [...browserHashes], [hashSecret("shared-ip")]),
     ...users.flatMap(id => [`owner:${id}:read`,`owner:${id}:write`]),
     ...qrIds.flatMap(id => [`verify-qr:${id}`,`verify-ip:${hashSecret("shared-ip")}:${id}`,...[...browserHashes].flatMap(hash => [`read:${hash}:${id}`,`verify:${hash}:${id}`])]),
   ].map(hashSecret);
@@ -85,7 +90,9 @@ describe("real local QR/session/guest database", () => {
     expect(await openTableSession(owner(), tables[0], { requestId: op.requestId })).toEqual(opened);
     const persisted = sql(`select row_to_json(s) from public.table_sessions s where id='${opened.session.id}'; select row_to_json(d) from public.session_code_deliveries d where session_id='${opened.session.id}'; select result_json from public.operation_requests where result_json->'session'->>'id'='${opened.session.id}'`);
     expect(persisted).not.toContain(opened.sessionCredential.sessionCode);
-    expect(persisted).toContain(hashSecret(opened.sessionCredential.sessionCode));
+    expect(opened.sessionCredential.sessionCode).toMatch(/^\d{6}$/);
+    expect(persisted).toContain(pinVerifier(opened.sessionCredential.sessionCode, stores[0], opened.session.id, 1, "v1"));
+    expect(persisted).not.toContain(hashSecret(opened.sessionCredential.sessionCode));
     expect(sql(`select count(*) from public.outbox_events where aggregate_id='${opened.session.id}'`)).toBe("1");
   });
   it("enforces owner membership/store and idempotency binding", async () => {
@@ -102,11 +109,12 @@ describe("real local QR/session/guest database", () => {
   });
   it("commits brute-force limits and isolates browsers on shared Wi-Fi", async () => {
     const attacker = { ...browser(), ipHash: hashSecret("shared-ip") };
-    for (let i=0;i<5;i++) await expect(verifyTableSession(qr[0], "wrong", attacker)).rejects.toMatchObject({ code: "INVALID_SESSION_CODE" });
-    await expect(verifyTableSession(qr[0], "wrong", attacker)).rejects.toMatchObject({ code: "RATE_LIMITED", details: { retryAfterSeconds: expect.any(Number) } });
+    const wrong = opened.sessionCredential.sessionCode === "000000" ? "000001" : "000000";
+    for (let i=0;i<5;i++) await expect(verifyTableSession(qr[0], wrong, attacker)).rejects.toMatchObject({ code: "INVALID_SESSION_CODE" });
+    await expect(verifyTableSession(qr[0], wrong, attacker)).rejects.toMatchObject({ code: "RATE_LIMITED", details: { retryAfterSeconds: expect.any(Number) } });
     expect(await verifyTableSession(qr[0], opened.sessionCredential.sessionCode, { ...deviceA, ipHash: attacker.ipHash })).toMatchObject({ requiresSessionCode: false, session: { id: opened.session.id } });
     // Move only this random fixture's bucket deadline; avoid a minute-long wait.
-    sql(`update public.security_rate_buckets set resets_at=clock_timestamp()-interval '1 second' where key_hash=encode(extensions.digest('verify:${attacker.browserHash}:'||(select id from public.qr_codes where public_code='${qr[0]}'),'sha256'),'hex')`);
+    sql(`update public.security_rate_buckets set resets_at=clock_timestamp()-interval '1 second' where key_hash in(encode(extensions.digest('verify:${attacker.browserHash}:'||(select id from public.qr_codes where public_code='${qr[0]}'),'sha256'),'hex'),encode(extensions.digest('pin-device-burst:${attacker.browserHash}:'||(select id from public.qr_codes where public_code='${qr[0]}'),'sha256'),'hex'))`);
     expect(await verifyTableSession(qr[0], opened.sessionCredential.sessionCode, attacker)).toMatchObject({ requiresSessionCode: false, session: { id: opened.session.id } });
   });
   it("issues independent grants to multiple devices and prevents cross-table access", async () => {
@@ -122,7 +130,8 @@ describe("real local QR/session/guest database", () => {
   });
   it("does not count successful verify retries as failed guesses", async () => {
     const device = browser();
-    for (let i=0;i<7;i++) expect((await verifyTableSession(qr[0], opened.sessionCredential.sessionCode, device)).requiresSessionCode).toBe(false);
+    for (let i=0;i<5;i++) expect((await verifyTableSession(qr[0], opened.sessionCredential.sessionCode, device)).requiresSessionCode).toBe(false);
+    expect(sql(`select count(*) from public.security_rate_buckets where key_hash=encode(extensions.digest('verify:${device.browserHash}:'||(select id from public.qr_codes where public_code='${qr[0]}'),'sha256'),'hex')`)).toBe("0");
     expect(sql(`select count(*) from public.guest_access where scope_id='${opened.session.id}' and browser_context_hash='${device.browserHash}'`)).toBe("1");
   });
   it("does not replay another owner's command even within the same store", async () => {
@@ -130,9 +139,9 @@ describe("real local QR/session/guest database", () => {
     const op = JSON.parse(sql(`select json_build_object('requestId',request_id) from public.operation_requests where result_json->'session'->>'id'='${opened.session.id}'`));
     await expect(openTableSession({ authUserId: users[2], storeId: stores[0] }, tables[0], { requestId: op.requestId })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
-  it("allows checkout-pending reads/verify but rejects future order writes", async () => {
+  it("allows existing checkout-pending reads but refuses new PIN grants and order writes", async () => {
     sql(`update public.table_sessions set status='checkout_pending',version=version+1 where id='${opened.session.id}'`);
-    expect(await verifyTableSession(qr[0], opened.sessionCredential.sessionCode, browser())).toMatchObject({ session: { status: "checkout_pending" } });
+    await expect(verifyTableSession(qr[0], opened.sessionCredential.sessionCode, browser())).rejects.toMatchObject({ code: "SESSION_CHECKOUT_PENDING" });
     await expect(requireGuestTableSession(qr[0], deviceA)).rejects.toMatchObject({ code: "SESSION_CHECKOUT_PENDING" });
     expect((await requireGuestTableSession(qr[0], deviceA, { forWrite: false })).sessionId).toBe(opened.session.id);
     await expect(openTableSession(owner(), tables[0], { requestId: randomUUID() })).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });

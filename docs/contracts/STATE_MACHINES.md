@@ -128,3 +128,7 @@ Envelope giữ ARCHITECTURE: `{data: T, error: null}` hoặc `{data: null, error
 | 500 | INTERNAL_ERROR (không trả trace/raw provider body) |
 
 API đọc payment pending thường trả **200 PaymentViewState**; PAYMENT_PENDING 409 chỉ khi command đòi tiền đã xác nhận. Owner queue chỉ accepted/preparing/ready, gồm cả hai loại, đã sort theo serviceDate/ticket; pending/exception ở bộ lọc ngoại lệ riêng, không giả ticket đang chờ. Dine-in hiển thị unpaid vẫn được chế biến. UI nhãn/step từ code+type; loading/empty/offline/reconnect/submitting là state cục bộ, không thêm enum DB. Table QR chưa verify cần form; authenticated QR phiên checkout_pending được xem thông tin nhưng không submit. Sẵn sàng tại bàn và sẵn sàng tại quầy cùng ready, hoàn tất suy ra served/collected.
+
+## P2-HF01 PIN generation amendment
+
+While session.status=open, explicit owner conversion/rotation atomically changes PIN generation and session.version without a status transition; new PIN differs from prior PIN. Existing guest grants/orders persist. Fresh PIN verify is denied during checkout_pending; existing grants still allow reads, with dine-in writes denied as before. Closed sessions cannot reveal/rotate/verify and cannot be reopened; new session receives independently generated PIN/ciphertext. Replay of an older generation is rejected rather than exposing an obsolete PIN.

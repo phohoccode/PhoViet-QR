@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Sparkles, Coffee, AlertCircle, RefreshCw, X } from 'lucide-react';
+import { Search, Coffee, AlertCircle, RefreshCw, X } from 'lucide-react';
 import type { MenuCategory, MenuItem } from '../../../docs/contracts/types';
 import { CategoryChips } from './CategoryChips';
 import { MenuItemPreviewCard } from './MenuItemPreviewCard';
@@ -37,22 +37,46 @@ function removeVietnameseDiacritics(str: string): string {
  */
 export const MenuPreviewSkeleton: React.FC = () => {
   return (
-    <div className="space-y-3 animate-pulse px-4 pt-2">
-      <div className="w-28 h-4 bg-[#E9ECEA] rounded" />
-      {[1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-[#E9ECEA]"
-        >
-          <div className="w-20 h-20 rounded-xl bg-[#F7F8F7] flex-shrink-0" />
-          <div className="flex-1 space-y-2">
-            <div className="w-3/4 h-4 bg-[#E9ECEA] rounded" />
-            <div className="w-full h-3 bg-[#F7F8F7] rounded" />
-            <div className="w-1/3 h-4 bg-[#E9ECEA] rounded mt-2" />
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-[#F7F8F7] flex-shrink-0" />
+    <div
+      className="space-y-3 animate-pulse"
+      role="status"
+      aria-busy="true"
+      aria-label="Đang nạp danh sách món..."
+    >
+      {/* 1. Search Bar Skeleton */}
+      <div className="px-4">
+        <div className="w-full h-11 bg-[#F7F8F7] border border-[#E9ECEA] rounded-xl" />
+      </div>
+
+      {/* 2. Category Chips Skeleton */}
+      <div className="py-1 px-4 flex items-center gap-2 overflow-x-hidden">
+        <div className="w-20 h-8 rounded-full bg-[#E9ECEA] flex-shrink-0" />
+        <div className="w-24 h-8 rounded-full bg-[#F7F8F7] border border-[#E9ECEA] flex-shrink-0" />
+        <div className="w-20 h-8 rounded-full bg-[#F7F8F7] border border-[#E9ECEA] flex-shrink-0" />
+        <div className="w-24 h-8 rounded-full bg-[#F7F8F7] border border-[#E9ECEA] flex-shrink-0" />
+      </div>
+
+      {/* 3. Items List Skeleton */}
+      <div className="px-4 space-y-3 pt-1">
+        <div className="flex items-center justify-between py-1">
+          <div className="w-28 h-3.5 bg-[#E9ECEA] rounded" />
         </div>
-      ))}
+
+        {[1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-[#E9ECEA]"
+          >
+            <div className="w-20 h-20 rounded-xl bg-[#F7F8F7] flex-shrink-0" />
+            <div className="flex-1 space-y-2">
+              <div className="w-3/4 h-4 bg-[#E9ECEA] rounded" />
+              <div className="w-full h-3 bg-[#F7F8F7] rounded" />
+              <div className="w-1/3 h-4 bg-[#E8F4F0] rounded mt-2" />
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] flex-shrink-0" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -126,7 +150,6 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
   isTableVerified = false,
   isTakeaway = false,
   isLoading = false,
-  isMockPreview = false,
   errorMessage = null,
   onRetry,
   onItemClick,
@@ -178,20 +201,7 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
 
   return (
     <div className={`space-y-3 ${className}`}>
-      {/* 1. Dải thông báo Preview nếu đang dùng mock fixtures */}
-      {isMockPreview && (
-        <div className="mx-4 px-3.5 py-2 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] flex items-center justify-between gap-2 text-xs text-[#727B77]">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <Sparkles className="w-4 h-4 text-[#35977D] flex-shrink-0" aria-hidden="true" />
-            <span className="truncate">Thực đơn minh họa (MOCK_PREVIEW)</span>
-          </div>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-[#E9ECEA] text-[#55605C] flex-shrink-0">
-            {activeItems.length} món
-          </span>
-        </div>
-      )}
-
-      {/* 2. Thanh tìm kiếm món có nút Xóa tìm kiếm */}
+      {/* 1. Thanh tìm kiếm món có nút Xóa tìm kiếm */}
       <div className="px-4">
         <label htmlFor="customer-menu-search" className="sr-only">
           Tìm món ăn hoặc thức uống

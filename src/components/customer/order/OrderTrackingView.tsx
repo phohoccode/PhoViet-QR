@@ -37,12 +37,9 @@ import {
   OrderApiError,
 } from '@/features/orders/api-client';
 import {
-  DEV_MOCK_ORDER_DETAIL_ACCEPTED,
-  DEV_MOCK_ORDER_DETAIL_PREPARING,
-  DEV_MOCK_ORDER_DETAIL_READY,
-  DEV_MOCK_ORDER_DETAIL_COMPLETED,
-  DEV_MOCK_ORDER_DETAIL_CANCELLED,
-} from './order-api';
+  saveActiveOrderSummary,
+  type ActiveOrderSummary,
+} from './active-order-storage';
 
 export interface OrderTrackingViewProps {
   orderId: string;
@@ -100,33 +97,112 @@ function getStepIndex(status: OrderStatus): number {
   }
 }
 
+/**
+ * OrderTrackingSkeleton — Khung xương tải tiến độ đơn hàng.
+ * Đồng bộ pixel-perfect với bố cục thật: Header, Stepper 4 bước, Chi tiết món và Nút hành động đáy.
+ */
+export const OrderTrackingSkeleton: React.FC<{ className?: string; qrCode?: string }> = ({
+  className = '',
+  qrCode,
+}) => {
+  return (
+    <div
+      className={`min-h-screen bg-[#F5F6F5] text-[#1D2522] ${className}`}
+      role="status"
+      aria-busy="true"
+      aria-label="Đang tải thông tin đơn hàng..."
+    >
+      <div className="w-full max-w-lg mx-auto bg-white min-h-screen shadow-sm flex flex-col pb-12 animate-pulse">
+        {/* 1. Header Navigation Skeleton */}
+        <header className="px-4 py-3 border-b border-[#E9ECEA] bg-white flex items-center justify-between sticky top-0 z-10">
+          <div className="flex items-center gap-2.5">
+            {qrCode && (
+              <div className="w-9 h-9 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA]" />
+            )}
+            <div className="space-y-1.5">
+              <div className="w-36 h-4 bg-[#E9ECEA] rounded" />
+              <div className="w-24 h-3 bg-[#F7F8F7] rounded" />
+            </div>
+          </div>
+          <div className="w-20 h-9 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA]" />
+        </header>
+
+        {/* 2. Hero Stepper Skeleton */}
+        <div className="p-4 bg-[#FAFBFB] border-b border-[#E9ECEA] space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="w-28 h-3.5 bg-[#E9ECEA] rounded" />
+            <div className="w-24 h-4 bg-[#E8F4F0] rounded" />
+          </div>
+
+          <div className="py-2">
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="flex flex-col items-center text-center space-y-2">
+                  <div className="w-10 h-10 rounded-full bg-[#E9ECEA]" />
+                  <div className="w-14 h-3 bg-[#F7F8F7] rounded" />
+                  <div className="w-10 h-2.5 bg-[#F7F8F7] rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Items Snapshot Skeleton */}
+        <div className="p-4 space-y-4 flex-1">
+          <div className="bg-white rounded-2xl border border-[#E9ECEA] p-4 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between border-b border-[#E9ECEA] pb-2.5">
+              <div className="w-32 h-3.5 bg-[#E9ECEA] rounded" />
+              <div className="w-12 h-3.5 bg-[#E8F4F0] rounded" />
+            </div>
+
+            <div className="space-y-3 pt-1">
+              {[1, 2].map((i) => (
+                <div key={i} className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-1">
+                    <div className="w-5 h-5 rounded bg-[#F7F8F7] border border-[#E9ECEA]" />
+                    <div className="space-y-1 flex-1">
+                      <div className="w-32 h-4 bg-[#E9ECEA] rounded" />
+                      <div className="w-20 h-3 bg-[#F7F8F7] rounded" />
+                    </div>
+                  </div>
+                  <div className="w-16 h-4 bg-[#E9ECEA] rounded" />
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-3 border-t border-[#E9ECEA] flex items-center justify-between">
+              <div className="w-16 h-4 bg-[#E9ECEA] rounded" />
+              <div className="w-24 h-5 bg-[#E8F4F0] rounded" />
+            </div>
+          </div>
+
+          {/* Info note box */}
+          <div className="p-3.5 rounded-2xl bg-[#FAFBFB] border border-[#E9ECEA] flex items-start gap-2.5">
+            <div className="w-4 h-4 rounded bg-[#E9ECEA] flex-shrink-0 mt-0.5" />
+            <div className="space-y-1.5 flex-1">
+              <div className="w-28 h-3.5 bg-[#E9ECEA] rounded" />
+              <div className="w-full h-3 bg-[#F7F8F7] rounded" />
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Bottom Sticky Action Skeleton */}
+        <div className="p-4 bg-white border-t border-[#E9ECEA] sticky bottom-0">
+          <div className="w-full h-12 rounded-xl bg-[#E8F4F0]" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
   orderId,
   qrCode,
   initialOrder = null,
-  isDemo = false,
-  demoStatus,
   className = '',
 }) => {
   const router = useRouter();
-  const [order, setOrder] = useState<OrderDetail | null>(() => {
-    if (initialOrder) return initialOrder;
-    if (isDemo) {
-      switch (demoStatus) {
-        case 'preparing':
-          return DEV_MOCK_ORDER_DETAIL_PREPARING;
-        case 'ready':
-          return DEV_MOCK_ORDER_DETAIL_READY;
-        case 'completed':
-          return DEV_MOCK_ORDER_DETAIL_COMPLETED;
-        case 'cancelled':
-          return DEV_MOCK_ORDER_DETAIL_CANCELLED;
-        default:
-          return DEV_MOCK_ORDER_DETAIL_ACCEPTED;
-      }
-    }
-    return null;
-  });
+  const [order, setOrder] = useState<OrderDetail | null>(initialOrder);
 
   const [isLoading, setIsLoading] = useState<boolean>(!order);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -141,7 +217,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
   // Tải trạng thái đơn hàng từ API R05
   const loadOrder = useCallback(
     async (isManual = false) => {
-      if (isDemo || isTerminalRef.current) return;
+      if (isTerminalRef.current) return;
 
       if (isManual) {
         setIsRefreshing(true);
@@ -213,7 +289,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
         setIsRefreshing(false);
       }
     },
-    [isDemo, orderId]
+    [orderId]
   );
 
   useEffect(() => {
@@ -222,7 +298,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
 
   // Khởi tạo tải lần đầu bằng pattern async IIFE có cancellation chuẩn React
   useEffect(() => {
-    if (order || isDemo) return;
+    if (order) return;
 
     let cancelled = false;
     void (async () => {
@@ -293,12 +369,26 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [order, isDemo, orderId]);
+  }, [order, orderId]);
+
+  // Đồng bộ trạng thái đơn hàng sang sessionStorage và broadcast cho các màn hình khác
+  useEffect(() => {
+    if (order) {
+      const summary: ActiveOrderSummary = {
+        id: order.id,
+        ticketNo: order.ticketNo ?? 0,
+        status: order.status,
+        itemCount: order.itemCount,
+        totalVnd: order.totalVnd,
+        tableLabel: order.table ? order.table.label : undefined,
+        updatedAt: new Date().toISOString(),
+      };
+      saveActiveOrderSummary(summary, qrCode);
+    }
+  }, [order, qrCode]);
 
   // Lắng nghe visibilitychange để tiếp tục poll khi quay lại tab
   useEffect(() => {
-    if (isDemo) return;
-
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && !isTerminalRef.current) {
         void loadOrder(false);
@@ -319,7 +409,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('online', handleOnline);
     };
-  }, [isDemo, loadOrder]);
+  }, [loadOrder]);
 
   const handleManualRefresh = () => {
     loadOrder(true);
@@ -335,16 +425,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
 
   // Skeleton loading khi đang fetch ban đầu
   if (isLoading) {
-    return (
-      <div className={`min-h-screen bg-[#F5F6F5] p-4 flex flex-col items-center justify-center ${className}`}>
-        <div className="w-full max-w-lg bg-white rounded-2xl p-6 border border-[#E9ECEA] shadow-xs space-y-4 text-center">
-          <div className="w-12 h-12 rounded-full bg-[#E8F4F0] mx-auto flex items-center justify-center text-[#1D725E] animate-spin">
-            <RefreshCw className="w-6 h-6" />
-          </div>
-          <p className="text-sm font-semibold text-[#1D2522]">Đang tải thông tin đơn hàng...</p>
-        </div>
-      </div>
-    );
+    return <OrderTrackingSkeleton className={className} qrCode={qrCode} />;
   }
 
   // Màn hình lỗi (404, 403, 410, mất mạng)

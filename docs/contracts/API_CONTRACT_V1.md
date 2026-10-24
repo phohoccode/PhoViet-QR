@@ -60,9 +60,9 @@ Response: 200 QRResolution, ba nhánh public table chưa verify, table có G phi
 
 ## R02 — POST /api/public/table-sessions/verify
 
-Schema `TableSessionVerifyInput`: required `qrCode:string` như R01; `sessionCode:string` 1–64 ký tự, opaque, **không hardcode 4 chữ số**. Browser cookie đã bootstrap hoặc cấp trong verify. Không requestId vì verify không tạo order/ticket; lặp credential hợp lệ có thể trả cùng session, reuse grant còn hiệu lực. Never log body.
+Schema `TableSessionVerifyInput` (P2-HF01): required qrCode như R01; sessionCode là string đúng sáu ASCII digits, giữ số 0 đầu. Giữ tên sessionCode để tương thích, không nhận pin alias. Browser cookie bootstrap hoặc cấp trong verify. Không requestId vì verify không tạo order/ticket; lặp PIN hợp lệ reuse grant, vẫn chịu burst limit. Never log body.
 
-200 QRResolution + Set-Cookie opaque bundle cập nhật đúng table_session grant, không JSON token. Bàn checkout_pending được verify để đọc nhưng không submit. Response minh họa:
+200 QRResolution + Set-Cookie opaque bundle cập nhật đúng table_session grant, không JSON token. P2-HF01 chỉ cấp grant mới khi open; checkout_pending trả409 SESSION_CHECKOUT_PENDING, grant cũ vẫn đọc được. Response minh họa:
 
 <!-- contract: ApiSuccess<QRResolution> -->
 ```json
@@ -345,7 +345,7 @@ O; query optional `tableId:Id`, không body. 200 OwnerTablesView: tables grid m�
 {"data":{"tables":[{"id":"table-05","label":"Bàn 05","active":true,"session":{"id":"session-05","status":"open","openedAt":"2026-10-23T02:50:00Z","closedAt":null,"orderCount":0,"totalVnd":0,"paymentStatus":"unpaid","version":1}}],"detail":{"table":{"id":"table-05","label":"Bàn 05"},"session":{"id":"session-05","status":"open","openedAt":"2026-10-23T02:50:00Z","closedAt":null,"orderCount":0,"totalVnd":0,"paymentStatus":"unpaid","version":1},"orders":[]}},"error":null}
 ```
 
-Rate owner-read; không event. Chi tiết lịch sử closed do kết quả settle lưu trên UI hoặc history phase sau; không bịa sessionCode trong currentSession. Chức năng đọc lại/rotate mã phiên là CR-UI-05, không dùng TableSummary làm credential delivery.
+Rate owner-read; không event. Chi tiết lịch sử closed do kết quả settle lưu trên UI hoặc history phase sau; không bịa sessionCode trong currentSession. P2-HF01 chốt reveal/rotate bên dưới, không dùng TableSummary làm credential delivery.
 
 ## R12 — POST /api/owner/tables/:id/sessions
 
@@ -354,10 +354,19 @@ O; path bàn; required body `{requestId:UUID}`. Store/table active, unique live 
 <!-- credential-example: owner-session-delivery -->
 <!-- contract: ApiSuccess<OwnerSessionOpenedView> -->
 ```json
-{"data":{"table":{"id":"table-05","label":"Bàn 05"},"session":{"id":"session-05","status":"open","openedAt":"2026-10-23T02:50:00Z","closedAt":null,"orderCount":0,"totalVnd":0,"paymentStatus":"unpaid","version":1},"sessionCredential":{"sessionCode":"DEMO-ONLY-NOT-A-REAL-CODE","expiresAt":"2026-10-23T14:50:00Z"}},"error":null}
+{"data":{"table":{"id":"table-05","label":"Bàn 05"},"session":{"id":"session-05","status":"open","openedAt":"2026-10-23T02:50:00Z","closedAt":null,"orderCount":0,"totalVnd":0,"paymentStatus":"unpaid","version":1},"sessionCredential":{"sessionCode":"000042","expiresAt":"2026-10-23T14:50:00Z","pinFormat":"numeric_6","generation":1,"issuedAt":"2026-10-23T03:00:00Z"}},"error":null}
 ```
 
-Mã hash DB; encrypted delivery artifact chỉ dùng replay cùng owner/request nếu còn hiệu lực (Q5 ASSUMPTION). Replay sau phiên đóng không tái cấp mã/phiên, trả 410 SESSION_EXPIRED. Hai key khác mở cùng bàn→một 201, một 409 INVALID_STATE_TRANSITION; không tự trả mã phiên cho command bị conflict. Missing/outside table→404 RESOURCE_NOT_FOUND; inactive→409 INVALID_STATE_TRANSITION; rate owner-write. Event table_session.opened không chứa credential. Không secret URL query/print list.
+P2-HF01: PIN CSPRNG sáu số, HMAC-SHA256 có pepper server riêng và context store/session/generation; AES-GCM có AAD cho replay/reveal owner. Replay sau phiên đóng trả410 SESSION_EXPIRED; sau rotate trả409 thay vì PIN lỗi thời. Hai key mở cùng bàn có một201, một409. Missing/outside table404 RESOURCE_NOT_FOUND; inactive409 INVALID_STATE_TRANSITION; rate owner-write. Event table_session.opened không chứa credential. Không secret URL query/print list.
+
+### P2-HF01 — explicit owner PIN reveal/rotate
+
+These two additive routes require owner Auth/membership, same-origin POST JSON<=4KiB, strict input, no query parameters, private/no-store and Vary Cookie/Origin. No GET or prefetch endpoint. Session IDs are UUIDs.
+
+- POST `/api/owner/table-sessions/:id/pin/reveal`, body `{}` →200 `ApiSuccess<OwnerTablePinView>` with sessionId,sessionVersion,pin,pinFormat=numeric_6,generation,issuedAt,expiresAt. Only open/unexpired PIN sessions; legacy→409 INVALID_STATE_TRANSITION. Audits PIN_REVEALED without value.
+- POST `/api/owner/table-sessions/:id/pin/rotate`, body `RotateTablePinInput` = `{requestId:UUID,expectedVersion:positiveSafeInteger,confirm:true}` →200 same private view. Converts legacy or changes PIN to a different value atomically; retains sessionId, orders, guest grants and original expiry. Stale version→409 INVALID_STATE_TRANSITION. Changed action/session/version with reused key→409 DUPLICATE_REQUEST_CONFLICT; another actor403. Same key replays current generation only; superseded key409; closed/expired410; checkout_pending409.
+
+Errors use standard envelope:400 VALIDATION_ERROR,401 UNAUTHORIZED,403 FORBIDDEN,404 RESOURCE_NOT_FOUND,409 INVALID_STATE_TRANSITION/SESSION_CHECKOUT_PENDING/DUPLICATE_REQUEST_CONFLICT,410 SESSION_EXPIRED,429 RATE_LIMITED with Retry-After,500 INTERNAL_ERROR sanitized. No PIN in public/list/order/menu/URL/log/outbox. Optional owner session.pinState=legacy|active|expired contains no secret; checkout_pending is separate session.status. Full deployment, key/rate policy, typed exports and evidence: docs/integration/P2_HF01_CODEX_PIN_HANDOFF.md.
 
 ## R13 — POST /api/owner/table-sessions/:id/settle
 

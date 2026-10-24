@@ -43,7 +43,7 @@ def walk(value: object, private_type: str = "", path: tuple = ()) -> None:
         if key == "sessionCode":
             assert private_type == "ApiSuccess<OwnerSessionOpenedView>"
             assert child_path == ("data", "sessionCredential", "sessionCode")
-            assert child == "DEMO-ONLY-NOT-A-REAL-CODE"
+            assert isinstance(child, str) and re.fullmatch(r"[0-9]{6}", child)
         if key == "pickup" and child is not None:
             assert private_type == "ApiSuccess<PrivateOrderTrackingView>"
             assert child_path == ("data", "pickup")

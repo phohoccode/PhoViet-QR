@@ -34,7 +34,7 @@ import {
 import type { CustomerCartItem, CartReadiness, CustomerCartActions } from './types';
 import { calculateLineTotalVnd } from './types';
 import type { OrderDetail } from '../../../../docs/contracts/types';
-import { useDineInCheckout } from '../order/useDineInCheckout';
+import { useDineInCheckout, type DineInCheckoutInstance } from '../order/useDineInCheckout';
 import { OrderConfirmedView } from '../order/OrderConfirmedView';
 
 interface PreCheckoutReviewProps {
@@ -48,6 +48,7 @@ interface PreCheckoutReviewProps {
   isTableVerified: boolean;
   readiness: CartReadiness;
   cartActions?: CustomerCartActions;
+  checkout?: DineInCheckoutInstance;
   onBackToCart: () => void;
   onGoToVerifyTable?: () => void;
   onOrderConfirmed?: (order: OrderDetail) => void;
@@ -67,6 +68,7 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
   isTableVerified,
   readiness,
   cartActions,
+  checkout: checkoutProp,
   onBackToCart,
   onGoToVerifyTable,
   onOrderConfirmed,
@@ -75,7 +77,7 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
   className = '',
 }) => {
   const router = useRouter();
-  const checkout = useDineInCheckout({
+  const internalCheckout = useDineInCheckout({
     qrCode,
     isTableVerified,
     isTakeaway,
@@ -85,6 +87,8 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
     onOrderConfirmed,
     isDemo,
   });
+
+  const checkout = checkoutProp || internalCheckout;
 
   const formattedSubtotal =
     subtotalVnd === null
@@ -408,6 +412,16 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
             <Loader2 className="w-4 h-4 animate-spin text-white" aria-hidden="true" />
             <span>Đang gửi đơn...</span>
           </button>
+        ) : checkout.status === 'uncertain' ? (
+          <button
+            type="button"
+            onClick={checkout.retryUncertainOrder}
+            className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E] hover:bg-[#165B4B] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+            aria-label="Kiểm tra lại đơn đang gửi"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Kiểm tra lại / Thử lại gửi đơn</span>
+          </button>
         ) : (
           <button
             type="button"
@@ -431,7 +445,9 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
           onClick={onBackToCart}
           className="w-full h-10 rounded-xl text-xs font-semibold text-[#1D725E] hover:bg-[#E8F4F0] transition-colors disabled:opacity-50"
         >
-          ← Quay lại chỉnh sửa giỏ hàng
+          {checkout.status === 'uncertain'
+            ? '← Xem giỏ hàng (giỏ hàng đang khóa)'
+            : '← Quay lại chỉnh sửa giỏ hàng'}
         </button>
       </div>
     </div>

@@ -79,7 +79,9 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
   // =========================================================================
   const [tablesList, setTablesList] = useState<OwnerTable[]>(toOwnerTables(tables));
   const [qrCodesList, setQrCodesList] = useState<OwnerQrCode[]>([]);
-  const [currentTablesState, setCurrentTablesState] = useState<OwnerTabState>(tablesState);
+  const [currentTablesState, setCurrentTablesState] = useState<OwnerTabState>(
+    tables.length > 0 ? tablesState : 'loading'
+  );
   const [tablesErrorMessage, setTablesErrorMessage] = useState<string | null>(null);
   const [isFetchingTables, setIsFetchingTables] = useState<boolean>(false);
 
@@ -137,108 +139,32 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
         // Non-JSON
       }
 
-      // Nếu ở dev mode và chưa đăng nhập Supabase, fallback sang fixtures
-      if (process.env.NODE_ENV !== 'production' && tables.length > 0) {
-        setTablesList(toOwnerTables(tables));
-        setCurrentTablesState('ready');
-        setIsFetchingTables(false);
-        return;
-      }
-
       setTablesErrorMessage(errMessage);
       setCurrentTablesState('error');
     } catch {
-      if (process.env.NODE_ENV !== 'production' && tables.length > 0) {
-        setTablesList(toOwnerTables(tables));
-        setCurrentTablesState('ready');
-        setIsFetchingTables(false);
-        return;
-      }
       setTablesErrorMessage('Lỗi mạng khi kết nối tới dịch vụ quản lý bàn.');
       setCurrentTablesState('error');
     } finally {
       setIsFetchingTables(false);
     }
-  }, [tables, onRetryTables]);
+  }, [onRetryTables]);
 
   // Tự động tải dữ liệu khi chuyển sang tab bàn hoặc cài đặt (UI-01)
   useEffect(() => {
     if (activeTab !== 'tables' && activeTab !== 'settings') return;
 
     let isCancelled = false;
-
-    (async () => {
-      try {
-        const [tablesRes, qrRes] = await Promise.all([
-          fetch('/api/owner/tables', {
-            credentials: 'include',
-            cache: 'no-store',
-            headers: { Accept: 'application/json' },
-          }),
-          fetch('/api/owner/qr-codes', {
-            credentials: 'include',
-            cache: 'no-store',
-            headers: { Accept: 'application/json' },
-          }),
-        ]);
-
-        if (isCancelled) return;
-
-        let hasData = false;
-        if (tablesRes.ok) {
-          const tablesJson = await tablesRes.json();
-          if (tablesJson?.data?.tables) {
-            setTablesList(tablesJson.data.tables);
-            hasData = true;
-          }
-        }
-
-        if (qrRes.ok) {
-          const qrJson = await qrRes.json();
-          if (qrJson?.data) {
-            setQrCodesList(qrJson.data);
-          }
-        }
-
-        if (hasData) {
-          setCurrentTablesState('ready');
-          return;
-        }
-
-        let errMessage = 'Không thể tải sơ đồ bàn từ máy chủ.';
-        try {
-          const errJson = await tablesRes.json();
-          if (errJson?.error?.message) {
-            errMessage = errJson.error.message;
-          }
-        } catch {
-          // Non-JSON
-        }
-
-        if (process.env.NODE_ENV !== 'production' && tables.length > 0) {
-          setTablesList(toOwnerTables(tables));
-          setCurrentTablesState('ready');
-          return;
-        }
-
-        setTablesErrorMessage(errMessage);
-        setCurrentTablesState('error');
-      } catch {
-        if (isCancelled) return;
-        if (process.env.NODE_ENV !== 'production' && tables.length > 0) {
-          setTablesList(toOwnerTables(tables));
-          setCurrentTablesState('ready');
-          return;
-        }
-        setTablesErrorMessage('Lỗi mạng khi kết nối tới dịch vụ quản lý bàn.');
-        setCurrentTablesState('error');
+    const timer = setTimeout(() => {
+      if (!isCancelled) {
+        void fetchTablesAndQRs();
       }
-    })();
+    }, 0);
 
     return () => {
       isCancelled = true;
+      clearTimeout(timer);
     };
-  }, [activeTab, tables]);
+  }, [activeTab, fetchTablesAndQRs]);
 
   return (
     <div className={`min-h-screen bg-[#F5F6F5] p-2 sm:p-4 md:p-6 text-[#1D2522] ${className}`}>

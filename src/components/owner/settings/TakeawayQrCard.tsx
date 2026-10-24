@@ -20,6 +20,7 @@ import {
 } from "@/features/owner/api-client";
 import { QrCodeView } from "../qr/QrCodeView";
 import { PrintQrVoucher } from "../qr/PrintQrVoucher";
+import { TakeawayQrSkeleton } from "../OwnerTabSkeletons";
 import {
   generateQrMatrix,
   matrixToSvg,
@@ -363,13 +364,7 @@ export const TakeawayQrCard: React.FC<TakeawayQrCardProps> = ({
         )}
 
         {isLoadingQr ? (
-          <div className="p-8 flex items-center justify-center gap-2 text-xs text-[#727B77]">
-            <Loader2
-              className="w-4 h-4 animate-spin text-[#1D725E]"
-              aria-hidden="true"
-            />
-            <span>Đang kiểm tra mã QR mang đi từ máy chủ...</span>
-          </div>
+          <TakeawayQrSkeleton />
         ) : !currentQr ? (
           /* Trạng thái chưa có QR Takeaway */
           <div className="p-6 bg-[#F7F8F7] border border-dashed border-[#E9ECEA] rounded-2xl text-center space-y-3">

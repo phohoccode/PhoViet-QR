@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { pinRateKeys } from "./pin-rate-fixtures.mjs";
 
 const status = JSON.parse(execFileSync(process.execPath, ["node_modules/supabase/dist/supabase.js", "status", "-o", "json"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
 assert.equal(status.API_URL, "http://127.0.0.1:15421");
@@ -14,7 +15,7 @@ const password = `${randomUUID()}aA!9`, emails = [0,1,2].map(() => `qr-http-${ra
 const base = "http://localhost:13003";
 const env = { ...process.env, OWNER_BOOTSTRAP_ENABLED: "false", NEXT_PUBLIC_SUPABASE_URL: status.API_URL,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.PUBLISHABLE_KEY || status.ANON_KEY, SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY,
-  TABLE_SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_SESSION_ACTIVE_KEY_ID: "v1", APP_ORIGIN: base, APP_BASE_URL: "https://qr.example.invalid" };
+  TABLE_SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_SESSION_ACTIVE_KEY_ID: "v1", TABLE_PIN_HMAC_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_PIN_ACTIVE_HMAC_KEY_ID: "v1", APP_ORIGIN: base, APP_BASE_URL: "https://qr.example.invalid" };
 let server, logs = "";
 const secrets = [password, ...emails, status.SERVICE_ROLE_KEY];
 const allCookies = new Set();
@@ -90,8 +91,8 @@ try {
   await expectError(await jsonCall("/api/public/table-sessions/verify",guestA,{qrCode:codes[0],sessionCode:code},"https://untrusted.example.invalid"),403,"FORBIDDEN");
   await expectError(await jsonCall("/api/public/table-sessions/verify",guestA,{qrCode:codes[0]}),400,"VALIDATION_ERROR");
   await expectError(await jsonCall("/api/public/table-sessions/verify",guestA,{qrCode:codes[0],sessionCode:"x".repeat(5000)}),400,"VALIDATION_ERROR");
-  for(let i=0;i<5;i++)await expectError(await jsonCall("/api/public/table-sessions/verify",attacker,{qrCode:codes[0],sessionCode:"wrong"}),422,"INVALID_SESSION_CODE");
-  response=await jsonCall("/api/public/table-sessions/verify",attacker,{qrCode:codes[0],sessionCode:"wrong"});
+  for(let i=0;i<5;i++)await expectError(await jsonCall("/api/public/table-sessions/verify",attacker,{qrCode:codes[0],sessionCode:code==="000000"?"000001":"000000"}),422,"INVALID_SESSION_CODE");
+  response=await jsonCall("/api/public/table-sessions/verify",attacker,{qrCode:codes[0],sessionCode:code==="000000"?"000001":"000000"});
   assert(response.headers.get("retry-after"));await expectError(response,429,"RATE_LIMITED");
   report("CSRF, strict body/size validation, persisted rate-limit and Retry-After");
   for(const cookies of [guestA,guestB]){
@@ -104,9 +105,35 @@ try {
   response=await call(`/api/public/qr/${codes[1]}`,guestA);assert.equal((await response.json()).data.session,null);
   for(const path of ["/api/owner/tables",`/api/owner/tables?tableId=${tables[0]}`,"/api/owner/qr-codes"]){response=await call(path,ownerJar);assert.equal(response.status,200);const body=await response.text();assert(!body.includes(code));assert(!body.includes("code_hash"));assert(!body.includes("artifact"));}
   report("two device grants, refresh persistence, cross-table isolation and secret-free owner lists");
+  const pinRoot=`/api/owner/table-sessions/${opened.data.session.id}/pin`;
+  for(const [suffix,body] of [["reveal",{}],["rotate",{requestId:randomUUID(),expectedVersion:1,confirm:true}]]){
+    await expectError(await jsonCall(`${pinRoot}/${suffix}`,jar(),body),401,"UNAUTHORIZED");
+    await expectError(await jsonCall(`${pinRoot}/${suffix}`,nonmemberJar,body),403,"FORBIDDEN");
+    await expectError(await jsonCall(`${pinRoot}/${suffix}`,foreignJar,body),404,"RESOURCE_NOT_FOUND");
+    await expectError(await jsonCall(`${pinRoot}/${suffix}`,ownerJar,body,"https://evil.example.invalid"),403,"FORBIDDEN");
+  }
+  await expectError(await jsonCall(`${pinRoot}/reveal?pin=bad`,ownerJar,{}),400,"VALIDATION_ERROR");
+  await expectError(await jsonCall(`${pinRoot}/reveal`,ownerJar,{pin:code}),400,"VALIDATION_ERROR");
+  await expectError(await jsonCall(`${pinRoot}/rotate`,ownerJar,{requestId:randomUUID(),expectedVersion:1}),400,"VALIDATION_ERROR");
+  response=await jsonCall(`${pinRoot}/reveal`,ownerJar,{});assert.equal(response.status,200);assert.match(response.headers.get("cache-control"),/no-store/);assert.match(response.headers.get("vary"),/Cookie/);
+  const revealed=(await response.json()).data;assert.equal(revealed.pin,code);assert.equal(revealed.pinFormat,"numeric_6");assert.match(code,/^[0-9]{6}$/);
+  const rotateCommand={requestId:randomUUID(),expectedVersion:1,confirm:true};
+  const rotations=await Promise.all(Array.from({length:8},()=>jsonCall(`${pinRoot}/rotate`,ownerJar,rotateCommand).then(async r=>{assert.equal(r.status,200);return(await r.json()).data;})));
+  rotations.forEach(value=>assert.deepEqual(value,rotations[0]));const newPin=rotations[0].pin;secrets.push(newPin);assert.notEqual(newPin,code);
+  response=await jsonCall(`${pinRoot}/reveal`,ownerJar,{});assert.equal((await response.json()).data.pin,newPin);
+  await expectError(await jsonCall("/api/public/table-sessions/verify",jar(),{qrCode:codes[0],sessionCode:code}),422,"INVALID_SESSION_CODE");
+  response=await jsonCall("/api/public/table-sessions/verify",jar(),{qrCode:codes[0],sessionCode:newPin});assert.equal(response.status,200);assert(!JSON.stringify(await response.json()).includes(newPin));
+  for(const invalid of ["12345","1234567","abcdef"])
+    await expectError(await jsonCall("/api/public/table-sessions/verify",jar(),{qrCode:codes[0],sessionCode:invalid}),400,"VALIDATION_ERROR");
+  response=await call(`/api/public/qr/${codes[0]}`,guestA);assert.equal((await response.json()).data.session.id,opened.data.session.id);
+  await expectError(await jsonCall(`/api/owner/tables/${tables[0]}/sessions`,ownerJar,{requestId:req}),409,"INVALID_STATE_TRANSITION");
+  assert.equal(sql(`select count(*) from public.table_pin_audit_log where session_id='${opened.data.session.id}' and action='PIN_ROTATED'`),"1");
+  report("PIN reveal/rotate HTTP auth, CSRF, no-store,8 same-key races, old PIN invalidation, existing-cookie continuity and strict six-digit validation");
   sql(`update public.table_sessions set status='checkout_pending' where id='${opened.data.session.id}'`);
-  response=await jsonCall("/api/public/table-sessions/verify",jar(),{qrCode:codes[0],sessionCode:code});assert.equal(response.status,200);assert.equal((await response.json()).data.session.status,"checkout_pending");
+  await expectError(await jsonCall("/api/public/table-sessions/verify",jar(),{qrCode:codes[0],sessionCode:code}),409,"SESSION_CHECKOUT_PENDING");
   sql(`update public.table_sessions set status='closed' where id='${opened.data.session.id}'`);
+  await expectError(await jsonCall(`${pinRoot}/reveal`,ownerJar,{}),410,"SESSION_EXPIRED");
+  await expectError(await jsonCall(`${pinRoot}/rotate`,ownerJar,{requestId:randomUUID(),expectedVersion:3,confirm:true}),410,"SESSION_EXPIRED");
   await expectError(await jsonCall("/api/public/table-sessions/verify",jar(),{qrCode:codes[0],sessionCode:code}),410,"SESSION_EXPIRED");
   await expectError(await jsonCall(`/api/owner/tables/${tables[0]}/sessions`,ownerJar,{requestId:req}),410,"SESSION_EXPIRED");
   response=await call(`/api/public/qr/${codes[0]}`,guestA);assert.equal((await response.json()).data.session,null);
@@ -119,8 +146,8 @@ try {
   if(server&&server.exitCode===null)await new Promise(resolve=>{server.once("exit",resolve);server.kill();});
   const qrIds=JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id in('${stores.join("','")}')`));
   const browserHashes=[...guestTokens].map(hash);
-  const buckets=[...users.flatMap(id=>[`owner:${id}:read`,`owner:${id}:write`]),...qrIds.flatMap(id=>[`verify-qr:${id}`,...browserHashes.flatMap(h=>[`read:${h}:${id}`,`verify:${h}:${id}`])])].map(hash);
-  sql(`begin;set local session_replication_role=replica;delete from public.guest_access where store_id in('${stores.join("','")}');delete from public.session_code_deliveries where session_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));
+  const buckets=[...pinRateKeys(qrIds,browserHashes),...users.flatMap(id=>[`owner:${id}:read`,`owner:${id}:write`]),...qrIds.flatMap(id=>[`verify-qr:${id}`,...browserHashes.flatMap(h=>[`read:${h}:${id}`,`verify:${h}:${id}`])])].map(hash);
+  sql(`begin;set local session_replication_role=replica;delete from public.table_pin_audit_log where store_id in('${stores.join("','")}');delete from public.guest_access where store_id in('${stores.join("','")}');delete from public.session_code_deliveries where session_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));
     delete from public.operation_requests where store_id in('${stores.join("','")}');delete from public.outbox_events where aggregate_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));
     delete from public.table_sessions where store_id in('${stores.join("','")}');delete from public.qr_codes where store_id in('${stores.join("','")}');delete from public.dining_tables where store_id in('${stores.join("','")}');
     delete from public.owner_members where store_id in('${stores.join("','")}');delete from public.stores where id in('${stores.join("','")}');

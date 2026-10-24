@@ -166,6 +166,8 @@ export interface TableSessionView {
   totalVnd: MoneyVnd; // payable total, excluding cancelled orders
   paymentStatus: 'unpaid' | 'paid';
   version: number;
+  /** Owner presentation metadata only; contains no credential. */
+  pinState?: 'legacy' | 'active' | 'expired';
 }
 /** Owner-only; guest session UI uses TableSessionDetail after scope checks. */
 export interface TableSummary {
@@ -225,7 +227,7 @@ export interface MenuV1View extends MenuView {
 }
 /** v1 requires a revision; the original v0.1 example/input remains available. */
 export interface CreateOrderV1Input extends CreateOrderInput { menuRevision: string }
-/** Sensitive transient request: never persist/log the plaintext code. */
+/** P2-HF01: sessionCode is the compatibility field, exactly six ASCII digits. Never log/persist. */
 export interface TableSessionVerifyInput { qrCode: string; sessionCode: string }
 export interface RequestCommand { requestId: Id }
 export interface OrderTransitionInput extends RequestCommand { expectedVersion: number }
@@ -255,8 +257,19 @@ export interface OpenTableSessionInput extends RequestCommand { }
 export interface OwnerSessionOpenedView {
   table: TableRef;
   session: TableSessionView & { status: 'open'; closedAt: null };
-  sessionCredential: { sessionCode: string; expiresAt: IsoTimestamp };
+  sessionCredential: { sessionCode: string; expiresAt: IsoTimestamp; pinFormat?: 'numeric_6'; generation?: number; issuedAt?: IsoTimestamp };
 }
+/** P2-HF01 private owner-only response, never part of table lists or SSR. */
+export interface OwnerTablePinView {
+  sessionId: Id;
+  sessionVersion: number;
+  pin: string;
+  pinFormat: 'numeric_6';
+  generation: number;
+  issuedAt: IsoTimestamp;
+  expiresAt: IsoTimestamp;
+}
+export interface RotateTablePinInput extends RequestCommand { expectedVersion: number; confirm: true }
 /** PRIVATE buyer-only projection, explicitly requested; never an owner/list DTO. */
 export interface PrivateOrderTrackingView {
   order: OrderDetail;

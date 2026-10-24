@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 /**
  * CUSTOMER CART SHEET COMPONENT — QR Ordering Minimal MVP
@@ -14,7 +14,7 @@
  * - Không tạo order, không thanh toán giả, không tạo mã đơn hay số FIFO.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   X,
   ShoppingBag,
@@ -22,22 +22,27 @@ import {
   Info,
   AlertCircle,
   AlertTriangle,
-} from 'lucide-react';
-import type { MenuItem } from '../../../../docs/contracts/types';
-import type { CustomerCartState, CustomerCartActions, CartReadiness, CustomerCartItem } from './types';
-import { CartLineItem } from './CartLineItem';
-import { PreCheckoutReview } from './PreCheckoutReview';
-import { EditCartItemDialog } from './EditCartItemDialog';
-import type { OrderDetail } from '../../../../docs/contracts/types';
+  RefreshCw,
+} from "lucide-react";
+import type { MenuItem } from "../../../../docs/contracts/types";
+import type {
+  CustomerCartState,
+  CustomerCartActions,
+  CartReadiness,
+  CustomerCartItem,
+} from "./types";
+import { CartLineItem } from "./CartLineItem";
+import { PreCheckoutReview } from "./PreCheckoutReview";
+import { EditCartItemDialog } from "./EditCartItemDialog";
+import { useDineInCheckout } from "../order/useDineInCheckout";
+import type { OrderDetail } from "../../../../docs/contracts/types";
+import {
+  type ActiveOrderSummary,
+  getOrderStatusBadgeConfig,
+  getOrderStatusSubtitle,
+} from "../order/active-order-storage";
 
-export interface ActiveOrderSummary {
-  id: string;
-  ticketNo: number;
-  status: string;
-  itemCount: number;
-  totalVnd: number;
-  tableLabel?: string;
-}
+export type { ActiveOrderSummary };
 
 interface CartSheetProps {
   isOpen: boolean;
@@ -66,20 +71,35 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   cartActions,
   readiness,
   isTakeaway = false,
-  tableLabel = 'Bàn',
+  tableLabel = "Bàn",
   storeName,
   qrCode,
   isTableVerified = false,
   menuItems = [],
   onGoToVerifyTable,
   isDemo = false,
-  className = '',
+  className = "",
   onOrderConfirmed,
   activeOrder,
   onTrackOrder,
 }) => {
+  // Hook xử lý checkout đặt món Dine-in được lift lên CartSheet để giữ nguyên intent (F01)
+  const checkout = useDineInCheckout({
+    qrCode: qrCode || "",
+    isTableVerified,
+    isTakeaway,
+    prepareOrderDraft: cartActions?.prepareOrderDraft,
+    clearCart: cartActions?.clearCart,
+    refreshCart: cartActions?.refresh,
+    onOrderConfirmed,
+    isDemo,
+  });
+
+  const isCartLocked =
+    checkout.status === "uncertain" || checkout.status === "submitting";
+
   // Trạng thái bước: 'cart' (xem danh sách món) | 'review' (xem lại trước đặt món)
-  const [currentStep, setCurrentStep] = useState<'cart' | 'review'>('cart');
+  const [currentStep, setCurrentStep] = useState<"cart" | "review">("cart");
   // State mở dialog sửa món
   const [editingItem, setEditingItem] = useState<CustomerCartItem | null>(null);
   // State làm mới trước khi xem lại
@@ -98,12 +118,16 @@ export const CartSheet: React.FC<CartSheetProps> = ({
     });
   }, [onClose]);
 
-  // Reset về bước cart khi sheet được mở lại
+  // Reset về bước cart khi sheet được mở lại (nếu có đơn uncertain thì mở thẳng review)
   const [prevIsOpen, setPrevIsOpen] = useState<boolean>(isOpen);
   if (isOpen !== prevIsOpen) {
     setPrevIsOpen(isOpen);
     if (isOpen) {
-      setCurrentStep('cart');
+      if (checkout.status === "uncertain") {
+        setCurrentStep("review");
+      } else {
+        setCurrentStep("cart");
+      }
       setEditingItem(null);
       setReviewError(null);
     }
@@ -112,12 +136,12 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   // Đóng bằng phím Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen && !editingItem) {
+      if (e.key === "Escape" && isOpen && !editingItem) {
         handleAnimatedClose();
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, editingItem, handleAnimatedClose]);
 
   // Xử lý mở màn hình xem lại trước khi đặt món (luôn refresh R01 + R03 mới nhất)
@@ -130,16 +154,16 @@ export const CartSheet: React.FC<CartSheetProps> = ({
         const res = await cartActions.refresh();
         setIsRefreshingReview(false);
         if (!res.ok) {
-          setReviewError(res.issue.message || 'Không thể làm mới thực đơn.');
+          setReviewError(res.issue.message || "Không thể làm mới thực đơn.");
           return;
         }
       } catch {
         setIsRefreshingReview(false);
-        setReviewError('Lỗi kết nối khi làm mới thực đơn từ máy chủ.');
+        setReviewError("Lỗi kết nối khi làm mới thực đơn từ máy chủ.");
         return;
       }
     }
-    setCurrentStep('review');
+    setCurrentStep("review");
   };
 
   if (!isOpen) return null;
@@ -147,8 +171,8 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   const { items, totalQuantity, subtotalVnd, isStorageAvailable } = cartState;
   const formattedSubtotal =
     subtotalVnd === null
-      ? 'Không tính được tổng tạm tính'
-      : new Intl.NumberFormat('vi-VN').format(subtotalVnd) + ' đ';
+      ? "Không tính được tổng tạm tính"
+      : new Intl.NumberFormat("vi-VN").format(subtotalVnd) + " đ";
 
   // Tìm MenuItem gốc cho dialog sửa món nếu có
   const activeMenuItem = editingItem
@@ -158,7 +182,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   return (
     <div
       className={`fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex sm:justify-end items-end sm:items-stretch ${
-        isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+        isClosing ? "animate-dialog-backdrop-out" : "animate-dialog-backdrop-in"
       } ${className}`}
       role="dialog"
       aria-modal="true"
@@ -169,12 +193,12 @@ export const CartSheet: React.FC<CartSheetProps> = ({
       <div
         className={`w-full sm:max-w-md h-[90vh] sm:h-full bg-[#F5F6F5] rounded-t-3xl sm:rounded-none sm:rounded-l-3xl shadow-2xl border-t sm:border-t-0 sm:border-l border-[#E9ECEA] flex flex-col overflow-hidden pointer-events-auto ${
           isClosing
-            ? 'animate-sheet-slide-down sm:animate-drawer-out'
-            : 'animate-sheet-slide-up sm:animate-drawer-in'
+            ? "animate-sheet-slide-down sm:animate-drawer-out"
+            : "animate-sheet-slide-up sm:animate-drawer-in"
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {currentStep === 'review' ? (
+        {currentStep === "review" ? (
           /* ===================================================================
               BƯỚC 2: MÀN HÌNH XEM LẠI TRƯỚC ĐẶT MÓN (PRE-CHECKOUT REVIEW)
              =================================================================== */
@@ -189,7 +213,8 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             isTableVerified={isTableVerified}
             readiness={readiness}
             cartActions={cartActions}
-            onBackToCart={() => setCurrentStep('cart')}
+            checkout={checkout}
+            onBackToCart={() => setCurrentStep("cart")}
             onCloseSheet={handleAnimatedClose}
             onOrderConfirmed={onOrderConfirmed}
             onGoToVerifyTable={() => {
@@ -211,7 +236,10 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 id="cart-sheet-title" className="text-base font-bold text-[#1D2522]">
+                    <h3
+                      id="cart-sheet-title"
+                      className="text-base font-bold text-[#1D2522]"
+                    >
                       Giỏ hàng
                     </h3>
                     <span className="text-xs font-semibold text-[#1D725E] bg-[#E8F4F0] px-2 py-0.5 rounded-full">
@@ -248,9 +276,13 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             {/* Cảnh báo storage bị hạn chế nếu có */}
             {!isStorageAvailable && (
               <div className="px-4 py-2 bg-[#FFFAEB] border-b border-[#FEDF89] text-[11px] text-[#B54708] flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                <AlertTriangle
+                  className="w-3.5 h-3.5 flex-shrink-0"
+                  aria-hidden="true"
+                />
                 <span>
-                  Bộ nhớ tạm bị hạn chế (Private Browsing). Giỏ hàng chỉ lưu tạm trong phiên này.
+                  Bộ nhớ tạm bị hạn chế (Private Browsing). Giỏ hàng chỉ lưu tạm
+                  trong phiên này.
                 </span>
               </div>
             )}
@@ -259,8 +291,13 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             {readiness.contextChanged && (
               <div className="px-4 py-2.5 bg-[#FFFAEB] border-b border-[#FEDF89] text-xs text-[#B54708] flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0 text-[#B54708]" aria-hidden="true" />
-                  <span>Phiên bàn đã thay đổi. Vui lòng xác nhận giỏ hàng.</span>
+                  <AlertTriangle
+                    className="w-4 h-4 flex-shrink-0 text-[#B54708]"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    Phiên bàn đã thay đổi. Vui lòng xác nhận giỏ hàng.
+                  </span>
                 </div>
                 {cartActions.confirmContextChange && (
                   <button
@@ -278,7 +315,10 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             {!isTakeaway && !isTableVerified && items.length > 0 && (
               <div className="px-4 py-2.5 bg-[#FEF6EE] border-b border-[#F9DBAF] text-xs text-[#8A4D00] flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-[#8A4D00]" aria-hidden="true" />
+                  <AlertCircle
+                    className="w-4 h-4 flex-shrink-0 text-[#8A4D00]"
+                    aria-hidden="true"
+                  />
                   <span>Cần xác thực mã phiên bàn để gọi món.</span>
                 </div>
                 {onGoToVerifyTable && (
@@ -296,6 +336,26 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               </div>
             )}
 
+            {/* Cảnh báo đơn UNCERTAIN đang chờ kết nối máy chủ (F01) */}
+            {checkout.status === "uncertain" && (
+              <div className="px-4 py-2.5 bg-[#FEF6EE] border-b border-[#F9DBAF] text-xs text-[#8A4D00] flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <AlertTriangle
+                    className="w-4 h-4 flex-shrink-0 text-[#B54708]"
+                    aria-hidden="true"
+                  />
+                  <span>Đang có đơn chờ xác nhận kết nối từ quán.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep("review")}
+                  className="text-xs font-bold text-[#B54708] underline hover:text-[#93370D] flex-shrink-0"
+                >
+                  Kiểm tra lại →
+                </button>
+              </div>
+            )}
+
             {/* 2. Danh sách món cuộn mượt mà */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {items.length === 0 ? (
@@ -306,38 +366,13 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   <div className="w-16 h-16 rounded-2xl bg-[#E8F4F0] text-[#1D725E] flex items-center justify-center mb-3">
                     <ShoppingBag className="w-8 h-8" aria-hidden="true" />
                   </div>
-                  <h4 className="text-base font-bold text-[#1D2522]">Giỏ hàng đang trống</h4>
+                  <h4 className="text-base font-bold text-[#1D2522]">
+                    Giỏ hàng đang trống
+                  </h4>
                   <p className="text-xs text-[#727B77] mt-1 max-w-xs">
-                    Bạn chưa chọn món nào vào giỏ. Hãy xem thực đơn và chọn những món bạn yêu thích
-                    nhé!
+                    Bạn chưa chọn món nào vào giỏ. Hãy xem thực đơn và chọn
+                    những món bạn yêu thích nhé!
                   </p>
-
-                  {/* Thẻ theo dõi đơn hàng đang phục vụ nếu có */}
-                  {activeOrder && (
-                    <div className="mt-4 p-3.5 bg-white border border-[#C6E7DC] rounded-2xl text-left w-full max-w-xs shadow-xs">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-bold text-[#1D2522]">
-                          Đơn #{String(activeOrder.ticketNo).padStart(3, '0')}
-                        </span>
-                        <span className="text-[10px] font-semibold text-[#1D725E] bg-[#E8F4F0] px-2 py-0.5 rounded-full border border-[#C6E7DC]">
-                          Đang chuẩn bị
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-[#55605C]">
-                        {activeOrder.itemCount} phần món đã gửi tới bếp
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          handleAnimatedClose();
-                          onTrackOrder?.(activeOrder.id);
-                        }}
-                        className="mt-2.5 w-full h-9 rounded-xl bg-[#1D725E] text-white text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-[#165B4B] transition-colors"
-                      >
-                        <span>Xem tiến độ đơn này →</span>
-                      </button>
-                    </div>
-                  )}
 
                   <button
                     type="button"
@@ -346,6 +381,46 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   >
                     Chọn món ngay
                   </button>
+
+                  {/* Thẻ theo dõi đơn hàng đang phục vụ nếu có */}
+                  {activeOrder &&
+                    (() => {
+                      const statusConfig = getOrderStatusBadgeConfig(
+                        activeOrder.status,
+                      );
+                      return (
+                        <div className="mt-4 p-3.5 bg-white border border-[#C6E7DC] rounded-2xl text-left w-full max-w-xs shadow-xs">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-bold text-[#1D2522]">
+                              Đơn #
+                              {String(activeOrder.ticketNo).padStart(3, "0")}
+                            </span>
+                            <span
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusConfig.badgeClass}`}
+                            >
+                              {statusConfig.label}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-[#55605C]">
+                            {getOrderStatusSubtitle(activeOrder, false)}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleAnimatedClose();
+                              onTrackOrder?.(activeOrder.id);
+                            }}
+                            className="mt-2.5 w-full h-9 rounded-xl bg-[#1D725E] text-white text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-[#165B4B] transition-colors"
+                          >
+                            <span>
+                              {statusConfig.isCompleted
+                                ? "Xem chi tiết đơn này →"
+                                : "Xem tiến độ đơn này →"}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })()}
                 </div>
               ) : (
                 /* ===============================================================
@@ -358,8 +433,9 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                     </span>
                     <button
                       type="button"
+                      disabled={isCartLocked}
                       onClick={cartActions.clearCart}
-                      className="text-xs font-semibold text-[#B42318] hover:underline"
+                      className="text-xs font-semibold text-[#B42318] hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Xóa tất cả
                     </button>
@@ -369,6 +445,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                     <CartLineItem
                       key={it.lineId}
                       item={it}
+                      disabled={isCartLocked}
                       onUpdateQuantity={cartActions.updateQuantity}
                       onRemove={cartActions.removeLine}
                       onEdit={(target) => setEditingItem(target)}
@@ -377,10 +454,13 @@ export const CartSheet: React.FC<CartSheetProps> = ({
 
                   {/* Chú thích giá minh bạch */}
                   <div className="p-3 rounded-xl bg-white border border-[#E9ECEA] flex items-start gap-2 text-[11px] text-[#727B77]">
-                    <Info className="w-3.5 h-3.5 text-[#35977D] flex-shrink-0 mt-0.5" aria-hidden="true" />
+                    <Info
+                      className="w-3.5 h-3.5 text-[#35977D] flex-shrink-0 mt-0.5"
+                      aria-hidden="true"
+                    />
                     <span>
-                      Giá hiển thị là tạm tính. Giá chính xác và tình trạng còn món sẽ được kiểm
-                      tra khi gửi đơn.
+                      Giá hiển thị là tạm tính. Giá chính xác và tình trạng còn
+                      món sẽ được kiểm tra khi gửi đơn.
                     </span>
                   </div>
                 </>
@@ -392,7 +472,9 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               <div className="p-4 bg-white border-t border-[#E9ECEA] space-y-3 flex-shrink-0">
                 <div className="flex items-center justify-between px-1">
                   <div>
-                    <span className="text-xs text-[#727B77] block">Tạm tính:</span>
+                    <span className="text-xs text-[#727B77] block">
+                      Tạm tính:
+                    </span>
                     <span className="text-lg font-bold text-[#1D2522] tracking-tight">
                       {formattedSubtotal}
                     </span>
@@ -403,20 +485,44 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   </span>
                 </div>
 
-                <button
-                  type="button"
-                  disabled={!readiness.canProceedToReview || subtotalVnd === null || isRefreshingReview}
-                  onClick={handleOpenReview}
-                  className={`w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
-                    !readiness.canProceedToReview || subtotalVnd === null || isRefreshingReview
-                      ? 'bg-[#F1F3F2] text-[#A0A8A5] cursor-not-allowed'
-                      : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white'
-                  }`}
-                  aria-label="Tiếp tục xem lại giỏ hàng"
-                >
-                  <span>{isRefreshingReview ? 'Đang cập nhật thực đơn...' : 'Tiếp tục xem lại đơn'}</span>
-                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                </button>
+                {checkout.status === "uncertain" ? (
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep("review")}
+                    className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white"
+                    aria-label="Kiểm tra lại đơn đang gửi"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Kiểm tra lại đơn đang gửi</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={
+                      !readiness.canProceedToReview ||
+                      subtotalVnd === null ||
+                      isRefreshingReview ||
+                      isCartLocked
+                    }
+                    onClick={handleOpenReview}
+                    className={`w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
+                      !readiness.canProceedToReview ||
+                      subtotalVnd === null ||
+                      isRefreshingReview ||
+                      isCartLocked
+                        ? "bg-[#F1F3F2] text-[#A0A8A5] cursor-not-allowed"
+                        : "bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white"
+                    }`}
+                    aria-label="Tiếp tục xem lại giỏ hàng"
+                  >
+                    <span>
+                      {isRefreshingReview
+                        ? "Đang cập nhật thực đơn..."
+                        : "Tiếp tục xem lại đơn"}
+                    </span>
+                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </button>
+                )}
 
                 {/* Thông báo lý do nếu không thể tiếp tục */}
                 {reviewError ? (
@@ -425,7 +531,8 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   </p>
                 ) : subtotalVnd === null ? (
                   <p className="text-[11px] text-[#B42318] text-center font-medium">
-                    Không thể tiếp tục do tổng tiền vượt quá giới hạn tính toán của quán.
+                    Không thể tiếp tục do tổng tiền vượt quá giới hạn tính toán
+                    của quán.
                   </p>
                 ) : readiness.hasUnavailableItems ? (
                   <p className="text-[11px] text-[#B42318] text-center font-medium">

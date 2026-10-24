@@ -538,7 +538,7 @@ export const MOCK_QR_TAKEAWAY: import('../../../docs/contracts/types').QRResolut
  * Mã phiên bàn demo hợp lệ để thử nghiệm giao diện trong môi trường dev
  * (Trong production, mã này được cấp ngẫu nhiên từ server Codex qua POS)
  */
-export const DEMO_VALID_SESSION_CODES = ['8821', 'MOC88', 'TABLE05', '1234'];
+export const DEMO_VALID_SESSION_CODES = ['482619', '012345', '8821', 'MOC88', 'TABLE05', '1234'];
 
 /* =============================================================================
    MOCK FIXTURES CHO OWNER MENU TAB (PHASE 2 — P2-G02)

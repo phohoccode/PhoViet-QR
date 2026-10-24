@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Info,
   Inbox,
+  Loader2,
 } from 'lucide-react';
 import type {
   OwnerOrdersQuery,
@@ -31,7 +32,7 @@ import {
 import { OrderQueueCard } from './OrderQueueCard';
 import { ClaimNextButton } from './ClaimNextButton';
 import { OrderDetailPanel } from './OrderDetailPanel';
-import { OrdersQueueSkeleton } from '../OwnerTabSkeletons';
+import { OrdersQueueSkeleton, OrderDetailSkeleton } from '../OwnerTabSkeletons';
 
 export interface OwnerOrdersViewProps {
   initialOrders?: OrderDetail[];
@@ -87,11 +88,13 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
   );
   const [isLoadingDetail, setIsLoadingDetail] = useState<boolean>(false);
 
-  // 4. Trạng thái loading / lỗi / polling
+  // 4. Trạng thái loading / lỗi / polling / pagination (F05)
   const [isLoading, setIsLoading] = useState<boolean>(initialOrders.length === 0);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
 
   // 5. Trạng thái thao tác FIFO (Claim Next) & Transition
   const [isClaiming, setIsClaiming] = useState<boolean>(false);
@@ -105,10 +108,21 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState<boolean>(false);
   const [isSheetClosing, setIsSheetClosing] = useState<boolean>(false);
 
-  // Stable UUID refs theo intent để bảo vệ idempotency khi timeout / retry
+  // Stable UUID ref cho claim FIFO
   const claimRequestIdRef = useRef<string | null>(null);
-  const readyRequestIdRef = useRef<string | null>(null);
-  const completeRequestIdRef = useRef<string | null>(null);
+
+  // F02: Immutable transition intent ref { action, orderId, expectedVersion, requestId, type }
+  const pendingTransitionRef = useRef<{
+    action: 'ready' | 'complete';
+    orderId: string;
+    expectedVersion: number;
+    requestId: string;
+    type?: 'dine_in' | 'takeaway';
+  } | null>(null);
+
+  // F04: Generation guards chống race condition khi lọc, poll hoặc đổi selection
+  const fetchGenerationRef = useRef<number>(0);
+  const detailGenerationRef = useRef<number>(0);
 
   // Polling timer ref
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -143,9 +157,10 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
     return q;
   }, [view, typeFilter, statusFilter, selectedOrderId]);
 
-  // Nạp danh sách đơn hàng từ API R07
+  // Nạp danh sách đơn hàng từ API R07 với generation guard (F04) và pagination cursor (F05)
   const loadOrders = useCallback(
     async (isManual = false) => {
+      const fetchGen = ++fetchGenerationRef.current;
       if (isManual) {
         setIsRefreshing(true);
         setErrorMessage(null);
@@ -155,8 +170,12 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         const query = buildQuery();
         const data: ApiOwnerOrdersView = await getOwnerOrders(query);
 
+        // F04: Bỏ qua kết quả cũ nếu đã có truy vấn mới hơn vượt mặt
+        if (fetchGen !== fetchGenerationRef.current) return;
+
         setOrders(data.orders);
         setCounts(data.counts);
+        setNextCursor(data.nextCursor);
         setLastUpdated(new Date());
 
         // Cập nhật chi tiết đơn đang chọn nếu server trả về trong snapshot
@@ -167,7 +186,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
           setSelectedOrder(null);
         }
 
-        // Lên lịch poll lần tiếp theo sau 6 giây (5–8s khuyến nghị)
+        // Lên lịch poll lần tiếp theo sau 6 giây (5–8s khuyến nghị) nếu màn hình hiển thị
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
         pollTimerRef.current = setTimeout(() => {
           if (document.visibilityState === 'visible' && navigator.onLine) {
@@ -175,6 +194,8 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
           }
         }, 6000);
       } catch (err: unknown) {
+        if (fetchGen !== fetchGenerationRef.current) return;
+
         if (err instanceof MenuApiError) {
           if (err.status === 401 || err.status === 403) {
             setErrorMessage('Phiên làm việc hết hạn hoặc bạn không có quyền xem danh sách đơn hàng.');
@@ -203,13 +224,43 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
           }
         }, 30000);
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
-        setIsLoadingDetail(false);
+        if (fetchGen === fetchGenerationRef.current) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+          setIsLoadingDetail(false);
+        }
       }
     },
     [buildQuery, selectedOrderId]
   );
+
+  // F05: Tải thêm đơn theo keyset pagination khi có nextCursor
+  const handleLoadMore = useCallback(async () => {
+    if (!nextCursor || isLoadingMore) return;
+    setIsLoadingMore(true);
+
+    try {
+      const query = buildQuery();
+      query.cursor = nextCursor;
+      const data: ApiOwnerOrdersView = await getOwnerOrders(query);
+
+      // Deduplicate orders by ID khi nối trang
+      setOrders((prev) => {
+        const existingIds = new Set(prev.map((o) => o.id));
+        const newOrders = data.orders.filter((o) => !existingIds.has(o.id));
+        return [...prev, ...newOrders];
+      });
+      setNextCursor(data.nextCursor);
+    } catch (err: unknown) {
+      if (err instanceof MenuApiError) {
+        showToast('error', err.error.message || 'Không thể tải thêm đơn cũ.');
+      } else {
+        showToast('error', 'Lỗi mạng khi tải thêm đơn hàng.');
+      }
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [nextCursor, isLoadingMore, buildQuery, showToast]);
 
   useEffect(() => {
     loadOrdersRef.current = () => loadOrders(false);
@@ -218,14 +269,17 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
   // Tải lần đầu và khi bộ lọc thay đổi
   useEffect(() => {
     let cancelled = false;
+    const fetchGen = ++fetchGenerationRef.current;
+
     void (async () => {
       try {
         const query = buildQuery();
         const data: ApiOwnerOrdersView = await getOwnerOrders(query);
-        if (cancelled) return;
+        if (cancelled || fetchGen !== fetchGenerationRef.current) return;
 
         setOrders(data.orders);
         setCounts(data.counts);
+        setNextCursor(data.nextCursor);
         setLastUpdated(new Date());
 
         if (data.detail) {
@@ -242,7 +296,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
           }
         }, 6000);
       } catch (err: unknown) {
-        if (cancelled) return;
+        if (cancelled || fetchGen !== fetchGenerationRef.current) return;
         if (err instanceof MenuApiError) {
           if (err.status === 401 || err.status === 403) {
             setErrorMessage('Phiên làm việc hết hạn hoặc không có quyền.');
@@ -250,15 +304,10 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
             setErrorMessage(err.error.message || 'Không thể tải đơn hàng.');
           }
         } else {
-          // Giữ mock preview nếu dev
-          if (initialOrders.length > 0) {
-            setOrders(initialOrders);
-          } else {
-            setErrorMessage('Mất kết nối mạng. Vui lòng kiểm tra đường truyền.');
-          }
+          setErrorMessage('Mất kết nối mạng. Vui lòng kiểm tra đường truyền.');
         }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && fetchGen === fetchGenerationRef.current) {
           setIsLoading(false);
         }
       }
@@ -291,7 +340,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
     };
   }, [loadOrders]);
 
-  // Chọn xem chi tiết một đơn
+  // Chọn xem chi tiết một đơn (F04: Có generation guard)
   const handleSelectOrder = useCallback(
     async (orderId: string) => {
       setSelectedOrderId(orderId);
@@ -302,18 +351,23 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         return;
       }
 
+      const detailGen = ++detailGenerationRef.current;
       setIsLoadingDetail(true);
       try {
         const data = await getOwnerOrders({ orderId, limit: 1 });
+        if (detailGen !== detailGenerationRef.current) return;
         if (data.detail) {
           setSelectedOrder(data.detail);
         }
       } catch {
+        if (detailGen !== detailGenerationRef.current) return;
         // Fallback: tìm trong initialOrders nếu có
         const found = initialOrders.find((o) => o.id === orderId);
         if (found) setSelectedOrder(found);
       } finally {
-        setIsLoadingDetail(false);
+        if (detailGen === detailGenerationRef.current) {
+          setIsLoadingDetail(false);
+        }
       }
     },
     [initialOrders, selectedOrder]
@@ -383,40 +437,55 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
 
   // =========================================================================
   // THAO TÁC 2: ĐÁNH DẤU MÓN ĐÃ LÀM XONG (R09 POST /api/owner/orders/:id/ready)
+  // F02: Ghi nhận immutable transition intent để tránh race condition khi poll/select
   // =========================================================================
   const handleMarkReady = useCallback(
     async (order: OrderDetail) => {
       if (isActionPending) return;
 
+      let intent = pendingTransitionRef.current;
+      if (intent) {
+        if (intent.orderId !== order.id || intent.action !== 'ready') {
+          showToast('error', 'Đang có thao tác chuyển trạng thái đơn hàng khác chưa hoàn tất.');
+          return;
+        }
+      } else {
+        intent = {
+          action: 'ready',
+          orderId: order.id,
+          expectedVersion: order.version,
+          requestId: crypto.randomUUID(),
+        };
+        pendingTransitionRef.current = intent;
+      }
+
       setIsActionPending(true);
       setPendingActionType('ready');
 
-      if (!readyRequestIdRef.current) {
-        readyRequestIdRef.current = crypto.randomUUID();
-      }
-      const targetRequestId = readyRequestIdRef.current;
-
       try {
-        const updatedOrder = await markOrderReady(order.id, {
-          requestId: targetRequestId,
-          expectedVersion: order.version,
+        const updatedOrder = await markOrderReady(intent.orderId, {
+          requestId: intent.requestId,
+          expectedVersion: intent.expectedVersion,
         });
 
-        readyRequestIdRef.current = null;
+        pendingTransitionRef.current = null;
         setSelectedOrder(updatedOrder);
         showToast('success', `Đơn #${updatedOrder.ticketNo || ''} đã sẵn sàng phục vụ.`);
         await loadOrders(false);
       } catch (err: unknown) {
         if (err instanceof MenuApiError) {
           if (err.status === 409) {
-            readyRequestIdRef.current = null;
+            pendingTransitionRef.current = null;
             showToast('error', 'Trạng thái đơn hàng đã được cập nhật ở nơi khác. Đang làm mới...');
             await loadOrders(false);
+          } else if (err.status >= 500) {
+            showToast('error', 'Máy chủ gặp sự cố trong khi xử lý. Bấm lại để thử lại với đúng yêu cầu ban đầu.');
           } else {
+            pendingTransitionRef.current = null;
             showToast('error', err.error.message || 'Không thể đánh dấu sẵn sàng.');
           }
         } else {
-          showToast('error', 'Mất kết nối mạng. Vui lòng thử lại.');
+          showToast('error', 'Mất kết nối mạng. Hãy bấm thử lại để tiếp tục với đúng yêu cầu ban đầu.');
         }
       } finally {
         setIsActionPending(false);
@@ -428,6 +497,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
 
   // =========================================================================
   // THAO TÁC 3: ĐÁNH DẤU ĐÃ PHỤC VỤ (R10 POST /api/owner/orders/:id/complete)
+  // F02: Ghi nhận immutable transition intent để tránh race condition khi poll/select
   // =========================================================================
   const handleComplete = useCallback(
     async (order: OrderDetail) => {
@@ -438,36 +508,51 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         return;
       }
 
+      let intent = pendingTransitionRef.current;
+      if (intent) {
+        if (intent.orderId !== order.id || intent.action !== 'complete') {
+          showToast('error', 'Đang có thao tác chuyển trạng thái đơn hàng khác chưa hoàn tất.');
+          return;
+        }
+      } else {
+        intent = {
+          action: 'complete',
+          orderId: order.id,
+          expectedVersion: order.version,
+          requestId: crypto.randomUUID(),
+          type: 'dine_in',
+        };
+        pendingTransitionRef.current = intent;
+      }
+
       setIsActionPending(true);
       setPendingActionType('complete');
 
-      if (!completeRequestIdRef.current) {
-        completeRequestIdRef.current = crypto.randomUUID();
-      }
-      const targetRequestId = completeRequestIdRef.current;
-
       try {
-        const updatedOrder = await completeOrder(order.id, {
-          requestId: targetRequestId,
-          expectedVersion: order.version,
+        const updatedOrder = await completeOrder(intent.orderId, {
+          requestId: intent.requestId,
+          expectedVersion: intent.expectedVersion,
           type: 'dine_in',
         });
 
-        completeRequestIdRef.current = null;
+        pendingTransitionRef.current = null;
         setSelectedOrder(updatedOrder);
         showToast('success', `Đơn #${updatedOrder.ticketNo || ''} đã hoàn tất phục vụ.`);
         await loadOrders(false);
       } catch (err: unknown) {
         if (err instanceof MenuApiError) {
           if (err.status === 409) {
-            completeRequestIdRef.current = null;
+            pendingTransitionRef.current = null;
             showToast('error', 'Đơn hàng đã được hoàn thành ở nơi khác. Đang làm mới...');
             await loadOrders(false);
+          } else if (err.status >= 500) {
+            showToast('error', 'Máy chủ gặp sự cố trong khi xử lý. Bấm lại để thử lại với đúng yêu cầu ban đầu.');
           } else {
+            pendingTransitionRef.current = null;
             showToast('error', err.error.message || 'Không thể xác nhận hoàn thành đơn.');
           }
         } else {
-          showToast('error', 'Mất kết nối mạng. Vui lòng thử lại.');
+          showToast('error', 'Mất kết nối mạng. Hãy bấm thử lại để tiếp tục với đúng yêu cầu ban đầu.');
         }
       } finally {
         setIsActionPending(false);
@@ -585,14 +670,37 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
                 </p>
               </div>
             ) : (
-              orders.map((order) => (
-                <OrderQueueCard
-                  key={order.id}
-                  order={order}
-                  isSelected={selectedOrderId === order.id}
-                  onSelect={() => handleSelectOrder(order.id)}
-                />
-              ))
+              <>
+                {orders.map((order) => (
+                  <OrderQueueCard
+                    key={order.id}
+                    order={order}
+                    isSelected={selectedOrderId === order.id}
+                    onSelect={() => handleSelectOrder(order.id)}
+                  />
+                ))}
+
+                {/* Keyset Pagination Load More (F05) */}
+                {nextCursor && (
+                  <div className="pt-2 text-center">
+                    <button
+                      type="button"
+                      disabled={isLoadingMore}
+                      onClick={handleLoadMore}
+                      className="w-full py-2.5 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-xs font-semibold text-[#1D725E] transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    >
+                      {isLoadingMore ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Đang tải thêm đơn...</span>
+                        </>
+                      ) : (
+                        <span>Tải thêm đơn cũ hơn</span>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </section>
@@ -601,14 +709,18 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
             CỘT PHẢI (~32% trên Desktop): Chi tiết phiếu đơn & Action
            =================================================================== */}
         <aside className="hidden lg:flex lg:w-[32%] flex-col min-h-0">
-          <OrderDetailPanel
-            order={selectedOrder}
-            isLoadingDetail={isLoadingDetail}
-            isActionPending={isActionPending}
-            pendingActionType={pendingActionType}
-            onMarkReady={handleMarkReady}
-            onComplete={handleComplete}
-          />
+          {isLoading ? (
+            <OrderDetailSkeleton />
+          ) : (
+            <OrderDetailPanel
+              order={selectedOrder}
+              isLoadingDetail={isLoadingDetail}
+              isActionPending={isActionPending}
+              pendingActionType={pendingActionType}
+              onMarkReady={handleMarkReady}
+              onComplete={handleComplete}
+            />
+          )}
         </aside>
       </div>
 

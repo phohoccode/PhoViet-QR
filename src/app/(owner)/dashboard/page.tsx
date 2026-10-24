@@ -4,11 +4,6 @@ import { OwnerShell } from '@/components/owner/OwnerShell';
 import type { OwnerTabType } from '@/components/owner/OwnerHeaderPills';
 import { requireOwner } from '@/server/auth/require-owner';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import {
-  MOCK_OWNER_ORDERS,
-  MOCK_TABLES_LIST,
-  MOCK_MENU_ITEMS,
-} from '@/lib/mocks/ui-preview';
 
 export const metadata: Metadata = {
   title: 'Quản lý quán | Phở Việt QR',
@@ -16,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 interface OwnerDashboardPageProps {
-  searchParams?: Promise<{ tab?: string; demoOrders?: string }>;
+  searchParams?: Promise<{ tab?: string }>;
 }
 
 /**
@@ -28,13 +23,11 @@ interface OwnerDashboardPageProps {
  * - User không đủ quyền bị chuyển hướng về /login?reason=access_denied.
  * - Hỗ trợ query ?tab=orders|tables|menu|settings chỉ cho UI view state, không cấp quyền.
  * - Nạp snapshot tên quán và trạng thái nhận đơn thực tế từ stores table (UI-05).
- * - Tab Đơn hàng ở Phase 2 là shell chờ Phase 3, không hiển thị đơn hàng hay doanh thu giả.
+ * - Nạp dữ liệu động từ API thật R11 (tables), R16 (menu), R17 (qr-codes/categories), FIFO orders.
  * - Nút Đăng xuất kết nối trực tiếp tới Server Action signOutOwnerAction của Codex P1-C02.
  */
 export default async function OwnerDashboardPage({ searchParams }: OwnerDashboardPageProps) {
   const params = await searchParams;
-  const isDev = process.env.NODE_ENV !== 'production';
-  const showDemoOrders = isDev && params?.demoOrders === 'true';
 
   const validTabs: OwnerTabType[] = ['orders', 'tables', 'menu', 'settings'];
   const tabParam = params?.tab as OwnerTabType | undefined;
@@ -67,9 +60,9 @@ export default async function OwnerDashboardPage({ searchParams }: OwnerDashboar
     <OwnerShell
       storeName={storeName}
       acceptingOrders={acceptingOrders}
-      orders={showDemoOrders ? MOCK_OWNER_ORDERS : []}
-      tables={MOCK_TABLES_LIST}
-      menuItems={MOCK_MENU_ITEMS}
+      orders={[]}
+      tables={[]}
+      menuItems={[]}
       initialTab={initialTab}
       ownerName="Chủ quán"
       roleLabel="Quản lý"
@@ -77,3 +70,4 @@ export default async function OwnerDashboardPage({ searchParams }: OwnerDashboar
     />
   );
 }
+

@@ -330,46 +330,8 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
         }
         return;
       }
-
       // Lỗi mạng hoặc server không phản hồi
-      if (process.env.NODE_ENV === 'production') {
-        // Trong production, TUYỆT ĐỐI không mock onSaved thành công
-        setServerError('Không thể kết nối đến máy chủ POS. Vui lòng kiểm tra mạng và thử lại.');
-        return;
-      }
-
-      // Chỉ fallback preview trong môi trường dev khi API local chưa chạy
-      const mockItem: OwnerMenuItem = {
-        id: item?.id || `item-mock-${Date.now()}`,
-        name: name.trim(),
-        categoryId,
-        priceVnd: parsedPrice,
-        description: description.trim() || null,
-        imageUrl: trimmedImg || null,
-        available: isAvailable,
-        active: isActive,
-        options: validOptions.map((o, idx) => ({
-          id: o.id || `opt-mock-${idx}`,
-          name: o.name,
-          priceDeltaVnd: o.priceDeltaVnd,
-          available: o.available,
-        })),
-        updatedAt: item?.updatedAt || new Date().toISOString(),
-      };
-
-      setSuccessMessage(
-        isEditing
-          ? 'Đã cập nhật (chế độ Mock Preview Dev)'
-          : 'Đã thêm món mới (chế độ Mock Preview Dev)'
-      );
-      onSaved?.(mockItem);
-      pendingRequestIdRef.current = null;
-
-      if (!isSidePanel && onClose) {
-        setTimeout(() => {
-          handleAnimatedClose();
-        }, 500);
-      }
+      setServerError('Không thể kết nối đến máy chủ POS. Vui lòng kiểm tra mạng và thử lại.');
     }
   };
 

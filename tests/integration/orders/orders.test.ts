@@ -249,6 +249,33 @@ it("create and session close serialize: close first rejects, create first commit
     expect(sql(`select count(*) from public.guest_access where scope_id='${session}' and revoked_at is null`)).toBe("0");
   }
 });
+it("checkout pending and create serialize in both lock orders; existing reads/replays survive checkout", async () => {
+  for (const checkoutFirst of [true, false]) {
+    const table = randomUUID(), session = randomUUID(), code = randomUUID();
+    sql(`insert into public.dining_tables(id,store_id,label) values('${table}','${stores[0]}','Checkout race ${table}');insert into public.qr_codes(store_id,type,table_id,public_code) values('${stores[0]}','table','${table}','${code}');insert into public.table_sessions(id,store_id,table_id,code_hash,code_expires_at) values('${session}','${stores[0]}','${table}','${"b".repeat(64)}',clock_timestamp()+interval '24 hours')`);
+    const context = device(session), input = command({ qrCode: code }), name = `p3-checkout-${session}`;
+    const first = checkoutFirst
+      ? concurrentSql(`set application_name='${name}';begin;update public.table_sessions set status='checkout_pending' where id='${session}';select pg_sleep(1);commit;`)
+      : concurrentSql(`set application_name='${name}';begin;set local role service_role;select public.p3_order_execute('create','${JSON.stringify({ command: input, browserHash: context.browserHash, grantProof: context.grantProof })}'::jsonb);select pg_sleep(1);commit;`);
+    for (let i = 0; i < 40; i++) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+      if (sql(`select count(*) from pg_stat_activity where application_name='${name}' and wait_event='PgSleep'`) === "1") break;
+      if (i === 39) throw Error("Checkout fixture did not acquire its session lock");
+    }
+    if (checkoutFirst) {
+      await expect(createDineInOrder(input, context)).rejects.toMatchObject({ code: "SESSION_CHECKOUT_PENDING" });
+      await first;
+    } else {
+      await concurrentSql(`update public.table_sessions set status='checkout_pending' where id='${session}'`);
+      await first;
+      const replay = await createDineInOrder(input, context);
+      expect((await getGuestOrder(replay.id, context)).id).toBe(replay.id);
+    }
+    await expect(createDineInOrder(command({ qrCode: code }), context)).rejects.toMatchObject({ code: "SESSION_CHECKOUT_PENDING" });
+    expect(sql(`select count(*) from public.orders where table_session_id='${session}'`)).toBe(checkoutFirst ? "0" : "1");
+    expect(sql(`select count(*) from public.guest_access where scope_id='${session}' and revoked_at is null`)).toBe("1");
+  }
+});
 it("rate limiting returns a committed cooldown; same-key replay bypasses create bucket", async () => {
   const context = device(), input = command(), order = await createDineInOrder(input, context);
   sql(`update public.security_rate_buckets set attempts=10 where key_hash=encode(extensions.digest('order-create:${context.browserHash}:${stores[0]}','sha256'),'hex')`);

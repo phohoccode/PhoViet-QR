@@ -23,6 +23,7 @@ interface CartLineItemProps {
   onUpdateQuantity: (lineId: string, delta: number) => void;
   onRemove: (lineId: string) => void;
   onEdit?: (item: CustomerCartItem) => void;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -31,6 +32,7 @@ export const CartLineItem: React.FC<CartLineItemProps> = ({
   onUpdateQuantity,
   onRemove,
   onEdit,
+  disabled = false,
   className = '',
 }) => {
   const unitPriceVnd = calculateUnitPriceVnd(item.basePriceVnd, item.selectedOptions);
@@ -170,8 +172,9 @@ export const CartLineItem: React.FC<CartLineItemProps> = ({
         {onEdit && (
           <button
             type="button"
+            disabled={disabled}
             onClick={() => onEdit(item)}
-            className="h-10 px-2.5 rounded-xl text-xs font-semibold text-[#1D725E] bg-[#E8F4F0] hover:bg-[#C6E7DC] flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+            className="h-10 px-2.5 rounded-xl text-xs font-semibold text-[#1D725E] bg-[#E8F4F0] hover:bg-[#C6E7DC] flex items-center gap-1.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label={`Chỉnh sửa tùy chọn và ghi chú cho ${item.name}`}
           >
             <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
@@ -183,8 +186,9 @@ export const CartLineItem: React.FC<CartLineItemProps> = ({
         <div className="flex items-center gap-1 bg-[#F7F8F7] border border-[#E9ECEA] rounded-xl p-0.5">
           <button
             type="button"
+            disabled={disabled}
             onClick={() => onUpdateQuantity(item.lineId, -1)}
-            className="w-10 h-10 rounded-lg bg-white border border-[#E9ECEA] flex items-center justify-center text-[#1D2522] hover:bg-[#F7F8F7] active:scale-95 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+            className="w-10 h-10 rounded-lg bg-white border border-[#E9ECEA] flex items-center justify-center text-[#1D2522] hover:bg-[#F7F8F7] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
             title={item.quantity === 1 ? 'Xóa món khỏi giỏ' : 'Giảm 1 phần'}
             aria-label={`Giảm số lượng ${item.name}`}
           >
@@ -204,7 +208,7 @@ export const CartLineItem: React.FC<CartLineItemProps> = ({
 
           <button
             type="button"
-            disabled={item.quantity >= 99 || isUnavailable}
+            disabled={disabled || item.quantity >= 99 || isUnavailable}
             onClick={() => onUpdateQuantity(item.lineId, 1)}
             className="w-10 h-10 rounded-lg bg-white border border-[#E9ECEA] flex items-center justify-center text-[#1D2522] hover:bg-[#F7F8F7] active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
             title="Tăng 1 phần (tối đa 99 phần)"

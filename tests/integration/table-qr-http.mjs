@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { pinRateKeys } from "./pin-rate-fixtures.mjs";
 const status = JSON.parse(execFileSync(process.execPath, ["node_modules/supabase/dist/supabase.js", "status", "-o", "json"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
 assert.equal(status.API_URL, "http://127.0.0.1:15421");
 const admin = createClient(status.API_URL, status.SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -12,7 +13,7 @@ const users = [], passwords = [randomUUID()+"aA!9", randomUUID()+"aA!9", randomU
 const secrets = [status.SERVICE_ROLE_KEY, ...passwords, ...emails], guestHashes = new Set();
 const env = { ...process.env, OWNER_BOOTSTRAP_ENABLED: "false", NEXT_PUBLIC_SUPABASE_URL: status.API_URL,
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.PUBLISHABLE_KEY || status.ANON_KEY, SUPABASE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY,
-  APP_ORIGIN: base, APP_BASE_URL: canonical, TABLE_SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_SESSION_ACTIVE_KEY_ID: "v1" };
+  APP_ORIGIN: base, APP_BASE_URL: canonical, TABLE_SESSION_ENCRYPTION_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_SESSION_ACTIVE_KEY_ID: "v1", TABLE_PIN_HMAC_KEYS: JSON.stringify({ v1: randomBytes(32).toString("base64") }), TABLE_PIN_ACTIVE_HMAC_KEY_ID: "v1" };
 const jars = [new Map(), new Map(), new Map()], guest = new Map();
 let server, logs = "";
 async function call(path, jar = guest, method = "GET", body, extra = {}) {
@@ -129,6 +130,9 @@ try {
   console.log("PASS HTTP rate-limit/Retry-After and no credential leakage in captured logs");
 } finally {
   if(server && server.exitCode===null) await new Promise(resolve=>{server.once("exit",resolve);server.kill();});
+  const pinQrIds=JSON.parse(sql(`select coalesce(json_agg(id),'[]') from public.qr_codes where store_id in('${stores.join("','")}')`));
+  const pinKeys=pinRateKeys(pinQrIds,[...guestHashes]);
+  sql(`delete from public.security_rate_buckets where key_hash in(select encode(extensions.digest(k,'sha256'),'hex') from unnest(array[${pinKeys.map(k=>`'${k}'`).join(",")}]::text[]) k)`);
   sql(`begin;set local session_replication_role=replica;
     delete from public.guest_access where store_id in('${stores.join("','")}');
     delete from public.session_code_deliveries where session_id in(select id from public.table_sessions where store_id in('${stores.join("','")}'));

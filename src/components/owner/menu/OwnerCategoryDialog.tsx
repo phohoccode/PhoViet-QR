@@ -14,8 +14,7 @@ interface OwnerCategoryDialogProps {
 
 /**
  * OwnerCategoryDialog — Dialog thêm danh mục thực đơn cho chủ quán.
- * Nối trực tiếp với API createCategory (P2-C02) khi có sẵn;
- * Có gắn nhãn WAITING_FOR_CODEX / MOCK_PREVIEW nếu backend chưa hỗ trợ đầy đủ.
+ * Nối trực tiếp với API createCategory (POST /api/owner/menu/categories).
  */
 export const OwnerCategoryDialog: React.FC<OwnerCategoryDialogProps> = ({
   isOpen,
@@ -32,7 +31,6 @@ export const OwnerCategoryDialog: React.FC<OwnerCategoryDialogProps> = ({
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [isWaitingForCodex, setIsWaitingForCodex] = useState<boolean>(false);
 
   const [prevIsOpen, setPrevIsOpen] = useState<boolean>(isOpen);
   if (isOpen !== prevIsOpen) {
@@ -44,7 +42,6 @@ export const OwnerCategoryDialog: React.FC<OwnerCategoryDialogProps> = ({
       setFieldError(null);
       setServerError(null);
       setSuccessMessage(null);
-      setIsWaitingForCodex(false);
     }
   }
 
@@ -132,27 +129,7 @@ export const OwnerCategoryDialog: React.FC<OwnerCategoryDialogProps> = ({
         return;
       }
 
-      if (process.env.NODE_ENV === 'production') {
-        // Trong production, TUYỆT ĐỐI không mock onCategoryCreated
-        setServerError('Không thể kết nối đến máy chủ. Vui lòng kiểm tra đường truyền.');
-        return;
-      }
-
-      // Chỉ fallback preview trong dev mode khi API local chưa chạy
-      setIsWaitingForCodex(true);
-      const mockCat: OwnerMenuCategory = {
-        id: `cat-mock-${Date.now()}`,
-        name: trimmedName,
-        sortOrder: Number(sortOrder) || 1,
-        active: isActive,
-        updatedAt: new Date().toISOString(),
-      };
-      onCategoryCreated?.(mockCat);
-      setSuccessMessage('Đã thêm danh mục (chế độ Mock Preview Dev).');
-      pendingRequestIdRef.current = null;
-      setTimeout(() => {
-        onClose();
-      }, 900);
+      setServerError('Không thể kết nối đến máy chủ. Vui lòng kiểm tra đường truyền.');
     }
   };
 
@@ -201,13 +178,6 @@ export const OwnerCategoryDialog: React.FC<OwnerCategoryDialogProps> = ({
           </button>
         </div>
 
-        {/* Thông báo nếu đang ở chế độ chờ Codex */}
-        {isWaitingForCodex && (
-          <div className="px-5 py-2 bg-[#FEF6EE] border-b border-[#F9DBAF] text-[11px] text-[#8A4D00] flex items-center gap-2">
-            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
-            <span>Chế độ xem trước (WAITING_FOR_CODEX: API danh mục đang được hoàn thiện).</span>
-          </div>
-        )}
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
