@@ -203,6 +203,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               BƯỚC 2: MÀN HÌNH XEM LẠI TRƯỚC ĐẶT MÓN (PRE-CHECKOUT REVIEW)
              =================================================================== */
           <PreCheckoutReview
+            className="h-full flex-1 min-h-0"
             items={items}
             subtotalVnd={subtotalVnd}
             totalQuantity={totalQuantity}
@@ -251,7 +252,7 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   <div className="flex items-center gap-1.5 mt-0.5">
                     {isTakeaway ? (
                       <span className="text-[11px] font-medium text-[#026AA2] bg-[#F0F9FF] px-1.5 py-0.2 rounded border border-[#B9E6FE]">
-                        Mang đi · Nhận tại quầy
+                        Mang đi
                       </span>
                     ) : (
                       <span className="text-[11px] font-medium text-[#1D725E] bg-[#E8F4F0] px-1.5 py-0.2 rounded border border-[#C6E7DC]">

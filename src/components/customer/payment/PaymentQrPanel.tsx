@@ -155,7 +155,7 @@ export const PaymentQrPanel: React.FC<PaymentQrPanelProps> = ({
               unoptimized
               src={qrSvgDataUri}
               alt="Mã VietQR thanh toán"
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain select-none pointer-events-none"
               width={240}
               height={240}
             />
@@ -164,7 +164,7 @@ export const PaymentQrPanel: React.FC<PaymentQrPanelProps> = ({
               unoptimized
               src={qrPayload}
               alt="Mã VietQR thanh toán"
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain select-none pointer-events-none"
               width={240}
               height={240}
             />

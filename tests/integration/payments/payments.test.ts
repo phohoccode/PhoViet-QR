@@ -10,7 +10,7 @@ import { hashSecret } from "../../../src/server/security/crypto";
 import { createDineInOrder } from "../../../src/server/orders/service";
 import type { GuestRequestContext } from "../../../src/server/security/request-context";
 import { getOwnerOrders, claimNextOrder, markOwnerOrderReady, completeOwnerOrder } from "../../../src/server/orders/owner-service";
-import { ensurePickupCredential, recoverPickupCredentials } from "../../../src/server/pickup/service";
+import { ensurePickupCredential, getPrivateTakeawayTracking, recoverPickupCredentials } from "../../../src/server/pickup/service";
 import * as pickupCrypto from "../../../src/server/pickup/crypto";
 import type { CreateOrderV1Input, OrderDetail, PrivateOrderTrackingView } from "../../../docs/contracts/types";
 
@@ -221,6 +221,8 @@ it("mixed dine-in/takeaway share admission order, owner claim and ready; pause d
   sql(`insert into public.guest_access(store_id,scope_id,token_hash,browser_context_hash,expires_at)
     values('${store}','${session}','${hashSecret(`${guest.grantProof}:${session}`)}','${guest.browserHash}',clock_timestamp()+interval '6 hours')`);
   const dine = await createDineInOrder(cmd({ qrCode: tableQr }), guest);
+  await expect(getPrivateTakeawayTracking(dine.id, guest)).rejects.toMatchObject({ code: "ORDER_NOT_FOUND" });
+  expect(await ensurePickupCredential(dine.id)).toBe(false);
   sql(`update public.stores set accepting_orders=false where id='${store}'`);
   try { expect(await receivePayosWebhook(await webhook(pending))).toMatchObject({ outcome: "accepted" }); }
   finally { sql(`update public.stores set accepting_orders=true where id='${store}'`); }
@@ -266,6 +268,8 @@ it("pickup: GET pending never issues, accepted recovers leading zeros only to co
   const first = await tracking(o, guest); expect(first.pickup?.code).toBe("000042");
   const stored = sql(`select row_to_json(c) from public.pickup_credentials c where order_id='${o.id}'`);
   expect((await tracking(o, guest)).pickup).toEqual(first.pickup);
+  const concurrentReads = await Promise.all(Array.from({ length: 20 }, () => tracking(o, guest)));
+  concurrentReads.forEach(view => expect(view.pickup).toEqual(first.pickup));
   expect(sql(`select row_to_json(c) from public.pickup_credentials c where order_id='${o.id}'`)).toBe(stored);
   await expect(tracking(o, device())).rejects.toMatchObject({ code: "ORDER_NOT_FOUND" });
   const other = await paid(); await expect(tracking(o, other.guest)).rejects.toMatchObject({ code: "ORDER_NOT_FOUND" });
@@ -492,6 +496,17 @@ it("C04: 100 simultaneous mixed real DB acceptances share unique ordered tickets
   expect(rows).toHaveLength(100);
   expect(rows.map((r: { ticket_no: number }) => r.ticket_no)).toEqual(Array.from({ length: 100 }, (_, n) => counterBefore + n + 1));
   expect(sql(`select count(*) from public.payments where intent_id in(select id from public.payment_intents where order_id in('${ids.join("','")}'))`)).toBe("50");
+  // HF02: fifty independent buyers can concurrently retrieve their own code
+  // after acceptance; a second read preserves the same credential.
+  const trackingViews = await Promise.all(fixtures.map(f => tracking(f.pending, f.guest)));
+  for (const [index, view] of trackingViews.entries()) {
+    expect(view.order.id).toBe(fixtures[index].pending.id);
+    expect(view.pickup?.code).toMatch(/^[0-9]{6}$/);
+  }
+  const reloaded = await Promise.all(fixtures.map(f => tracking(f.pending, f.guest)));
+  expect(reloaded.map(v => v.pickup)).toEqual(trackingViews.map(v => v.pickup));
+  await expect(tracking(fixtures[0].pending, fixtures[1].guest)).rejects.toMatchObject({ code: "ORDER_NOT_FOUND" });
+  expect(sql(`select count(*) from public.pickup_credentials where order_id in('${fixtures.map(f => f.pending.id).join("','")}')`)).toBe("50");
   for (const relation of ["order_events", "outbox_events"]) {
     const idColumn = relation === "order_events" ? "order_id" : "aggregate_id", topicColumn = relation === "order_events" ? "event_type" : "topic";
     expect(sql(`select count(*) from public.${relation} where ${idColumn} in('${ids.join("','")}') and ${topicColumn}='order.accepted'`)).toBe("100");

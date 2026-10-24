@@ -97,12 +97,16 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
 
   // Khi đơn đã được xác nhận bởi máy chủ
   if (checkout.status === 'confirmed' && checkout.confirmedOrder) {
-    // Nếu là đơn Takeaway đang chờ thanh toán VietQR -> hiển thị TakeawayPaymentView
-    if (checkout.confirmedOrder.type === 'takeaway' && checkout.confirmedOrder.status === 'pending_payment') {
+    // Nếu là đơn Takeaway đang chờ thanh toán hoặc cần đối soát VietQR -> hiển thị TakeawayPaymentView
+    if (
+      checkout.confirmedOrder.type === 'takeaway' &&
+      (checkout.confirmedOrder.status === 'pending_payment' || checkout.confirmedOrder.status === 'payment_exception')
+    ) {
       return (
         <TakeawayPaymentView
           order={checkout.confirmedOrder}
           qrCode={qrCode}
+          className="h-full max-h-full"
           onBackToMenu={() => {
             checkout.resetCheckout();
             onBackToCart();
@@ -152,7 +156,7 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
   const canSubmit = isTakeaway ? canSubmitTakeaway : canSubmitDineIn;
 
   return (
-    <div className={`flex flex-col h-full ${className}`}>
+    <div className={`flex flex-col h-full min-h-0 flex-1 ${className}`}>
       {/* Header thanh điều hướng quay lại */}
       <div className="p-4 border-b border-[#E9ECEA] bg-white flex items-center gap-3 flex-shrink-0">
         <button
@@ -176,7 +180,7 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
       </div>
 
       {/* Nội dung cuộn chính */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {/* =====================================================================
             1. Thẻ Loại Đơn & Chính Sách Phục Vụ
            ===================================================================== */}
@@ -187,7 +191,7 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
                 <ShoppingBag className="w-4 h-4" aria-hidden="true" />
               </div>
               <span className="text-xs font-bold text-[#026AA2] uppercase tracking-wide">
-                Mang đi · Nhận tại quầy
+                Mang đi
               </span>
             </div>
 

@@ -213,6 +213,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [pickupCode, setPickupCode] = useState<string | null>(null);
+  const [pickupMessage, setPickupMessage] = useState<string | null>(null);
   const [isLoadingPickup, setIsLoadingPickup] = useState<boolean>(() =>
     Boolean(
       initialOrder &&
@@ -227,14 +228,24 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
   // Tham chiếu timer polling có thể thay đổi tần suất linh hoạt (5–8s mặc định, 30s khi lỗi)
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isTerminalRef = useRef<boolean>(false);
+  const pickupAttemptsRef = useRef(0);
+  const failedLoadsRef = useRef(0);
+  const inFlightRef = useRef(false);
+  const generationRef = useRef(0);
   const loadOrderRef = useRef<((isManual?: boolean) => Promise<void>) | null>(null);
 
   // Tải trạng thái đơn hàng từ API R05
   const loadOrder = useCallback(
     async (isManual = false) => {
-      if (isTerminalRef.current) return;
+      if ((isTerminalRef.current && !isManual) || inFlightRef.current) return;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      inFlightRef.current = true;
+      const generation = generationRef.current;
 
       if (isManual) {
+        isTerminalRef.current = false;
+        pickupAttemptsRef.current = 0;
+        failedLoadsRef.current = 0;
         setIsRefreshing(true);
         setErrorMessage(null);
         setErrorCode(null);
@@ -243,25 +254,42 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
       try {
         let resolvedOrder: OrderDetail;
         let privatePickupCode: string | null = null;
+        let privateFailed = false;
 
-        try {
-          const privateView = await getPrivateOrderTracking(orderId);
-          resolvedOrder = privateView.order;
-          privatePickupCode = privateView.pickup?.code ?? null;
-        } catch {
-          // Fallback sang endpoint chuẩn nếu private tracking không khả dụng
+        if (pickupAttemptsRef.current < 5) {
+          try {
+            const privateView = await getPrivateOrderTracking(orderId);
+            resolvedOrder = privateView.order;
+            privatePickupCode = privateView.pickup?.code ?? null;
+          } catch {
+            if (generation !== generationRef.current) return;
+            pickupAttemptsRef.current++;
+            privateFailed = true;
+            resolvedOrder = await getCustomerOrderTracking(orderId);
+          }
+        } else {
           resolvedOrder = await getCustomerOrderTracking(orderId);
         }
 
+        if (generation !== generationRef.current) return;
+        failedLoadsRef.current = 0;
         const isHeldForReview = isPaymentReviewRequired(resolvedOrder);
         setErrorMessage(null);
         setErrorCode(null);
         setOrder(resolvedOrder);
 
-        if (privatePickupCode && !isHeldForReview) {
-          setPickupCode(privatePickupCode);
-        } else if (isHeldForReview) {
-          setPickupCode(null);
+        // Never retain a code from an older snapshot after auth/expiry/hold.
+        setPickupCode(!isHeldForReview ? privatePickupCode : null);
+        const eligible = resolvedOrder.type === 'takeaway' && !isHeldForReview &&
+          ['accepted', 'preparing', 'ready'].includes(resolvedOrder.status);
+        if (eligible && !privatePickupCode) {
+          if (!privateFailed) pickupAttemptsRef.current++;
+          setPickupMessage(privateFailed || pickupAttemptsRef.current >= 5
+            ? 'Chưa tải được mã nhận món. Bấm Làm mới để thử lại hoặc liên hệ quầy.'
+            : 'Mã nhận món chưa sẵn sàng. Hệ thống sẽ thử lại; bạn có thể bấm Làm mới.');
+        } else {
+          pickupAttemptsRef.current = 0;
+          setPickupMessage(null);
         }
 
         if (resolvedOrder.status === 'completed' || resolvedOrder.status === 'cancelled') {
@@ -278,6 +306,10 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
           }
         }, 6000);
       } catch (err: unknown) {
+        if (generation !== generationRef.current) return;
+        failedLoadsRef.current++;
+        setPickupCode(null);
+        setPickupMessage('Chưa tải được mã nhận món. Bấm Làm mới để thử lại hoặc liên hệ quầy.');
         if (err instanceof OrderApiError) {
           setErrorCode(err.error.code);
           const status = err.status;
@@ -295,6 +327,10 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
             if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
             return;
           } else if (status === 429) {
+            if (failedLoadsRef.current >= 3) {
+              setErrorMessage('Đã thử tải nhiều lần. Bấm Làm mới để thử lại.');
+              return;
+            }
             const waitMs = Math.max(10, err.retryAfterSeconds ?? 15) * 1000;
             if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
             pollTimerRef.current = setTimeout(() => {
@@ -312,14 +348,19 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
 
         // Khi gặp lỗi mạng / 500: lùi thời gian polling (backoff) lên 30s
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        if (failedLoadsRef.current >= 3) return;
         pollTimerRef.current = setTimeout(() => {
           if (document.visibilityState === 'visible' && navigator.onLine) {
             void loadOrderRef.current?.(false);
           }
         }, 30000);
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        if (generation === generationRef.current) {
+          inFlightRef.current = false;
+          setIsLoadingPickup(false);
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     },
     [orderId]
@@ -331,65 +372,18 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
 
   // Khởi tạo tải lần đầu hoặc nạp mã nhận món nếu đã có initialOrder
   useEffect(() => {
-    let cancelled = false;
-
-    // Nếu đã có initialOrder
-    if (initialOrder) {
-      // Nếu là Takeaway đang chuẩn bị/sẵn sàng -> tải ngay mã nhận món (nếu không bị hold)
-      if (
-        initialOrder.type === 'takeaway' &&
-        !isPaymentReviewRequired(initialOrder) &&
-        (initialOrder.status === 'accepted' ||
-          initialOrder.status === 'preparing' ||
-          initialOrder.status === 'ready')
-      ) {
-        void getPrivateOrderTracking(orderId)
-          .then((privateView) => {
-            if (!cancelled && privateView?.pickup?.code) {
-              setPickupCode(privateView.pickup.code);
-            }
-          })
-          .catch(() => {
-            // Không làm gián đoạn luồng xem đơn nếu private tracking chưa cấp mã
-          })
-          .finally(() => {
-            if (!cancelled) {
-              setIsLoadingPickup(false);
-            }
-          });
-      }
-
-      if (initialOrder.status === 'completed' || initialOrder.status === 'cancelled') {
-        isTerminalRef.current = true;
-        return;
-      }
-
-      // Lên lịch poll lần tiếp theo sau 6s
-      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      pollTimerRef.current = setTimeout(() => {
-        if (document.visibilityState === 'visible' && navigator.onLine) {
-          void loadOrderRef.current?.(false);
-        }
-      }, 6000);
-
-      return () => {
-        cancelled = true;
-        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-      };
-    }
-
-    // Nếu chưa có initialOrder -> tải ngay lần đầu
-    void (async () => {
-      if (!cancelled) {
-        await loadOrder(false);
-      }
-    })();
-
+    isTerminalRef.current = false;
+    pickupAttemptsRef.current = 0;
+    failedLoadsRef.current = 0;
+    const generation = generationRef.current;
+    const initialTimer = setTimeout(() => void loadOrder(false), 0);
     return () => {
-      cancelled = true;
+      generationRef.current = generation + 1;
+      inFlightRef.current = false;
+      clearTimeout(initialTimer);
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [orderId, initialOrder, loadOrder]);
+  }, [orderId, loadOrder]);
 
   // Đồng bộ trạng thái đơn hàng sang sessionStorage và broadcast cho các màn hình khác
   useEffect(() => {
@@ -411,12 +405,16 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && !isTerminalRef.current) {
+        pickupAttemptsRef.current = 0;
+        failedLoadsRef.current = 0;
         void loadOrder(false);
       }
     };
 
     const handleOnline = () => {
       if (!isTerminalRef.current) {
+        pickupAttemptsRef.current = 0;
+        failedLoadsRef.current = 0;
         void loadOrder(false);
       }
     };
@@ -444,7 +442,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
   };
 
   // Skeleton loading khi đang fetch ban đầu
-  if (isLoading) {
+  if (isLoading || (order && order.id !== orderId)) {
     return <OrderTrackingSkeleton className={className} qrCode={qrCode} />;
   }
 
@@ -505,7 +503,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
         onCheckStatus={() => loadOrder(true)}
         onBackToMenu={handleOrderMore}
         onTrackOrder={() => loadOrder(true)}
-        className={className}
+        className={className || 'h-screen h-[100dvh] max-h-screen max-h-[100dvh]'}
       />
     );
   }
@@ -519,7 +517,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
         onCheckStatus={() => loadOrder(true)}
         onBackToMenu={handleOrderMore}
         onTrackOrder={() => loadOrder(true)}
-        className={className}
+        className={className || 'h-screen h-[100dvh] max-h-screen max-h-[100dvh]'}
       />
     );
   }
@@ -685,6 +683,7 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                     orderStatus={order.status}
                     pickupCode={pickupCode}
                     isLoadingPickup={isLoadingPickup}
+                    pickupMessage={pickupMessage}
                     completedAt={order.status === 'completed' ? order.updatedAt : null}
                   />
                 </div>

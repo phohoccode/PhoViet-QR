@@ -1,0 +1,22 @@
+{
+  "environment": "LOCAL_ONLY Docker PostgreSQL + PostgREST + Node22, signed TEST ONLY payOS fixtures; no provider IO",
+  "concurrency": 100,
+  "dineIn": 50,
+  "takeaway": 50,
+  "attempts": 100,
+  "successes": 100,
+  "errors": 0,
+  "applicationRetries": 0,
+  "durationMs": 1042,
+  "p50Ms": 735,
+  "p95Ms": 1023,
+  "failedInbox": 0,
+  "pickupTracking": {
+    "buyers": 50,
+    "authorizedReads": 100,
+    "crossScopeDenied": 1,
+    "credentials": 50,
+    "stableReloads": true,
+    "environment": "LOCAL_ONLY"
+  }
+}

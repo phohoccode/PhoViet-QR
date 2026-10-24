@@ -1,0 +1,50 @@
+{
+  "environment": "LOCAL_ONLY Next production build + PostgreSQL; signed TEST ONLY fixture webhook; no provider IO",
+  "orderAlias": "local-takeaway-A",
+  "intentAlias": "local-intent-A",
+  "providerE2E": "NOT_RUN",
+  "steps": [
+    {
+      "status": "pending_payment",
+      "paymentStatus": "pending",
+      "ticketNo": null,
+      "version": 1,
+      "acceptedAt": null
+    },
+    {
+      "status": "accepted",
+      "paymentStatus": "paid",
+      "ticketNo": 1,
+      "version": 2,
+      "acceptedAt": "2026-10-24T04:23:59.562654+00:00"
+    },
+    {
+      "status": "preparing",
+      "paymentStatus": "paid",
+      "ticketNo": 1,
+      "version": 3,
+      "acceptedAt": "2026-10-24T04:23:59.562654+00:00"
+    },
+    {
+      "status": "ready",
+      "paymentStatus": "paid",
+      "ticketNo": 1,
+      "version": 4,
+      "acceptedAt": "2026-10-24T04:23:59.562654+00:00"
+    },
+    {
+      "status": "completed",
+      "paymentStatus": "paid",
+      "ticketNo": 1,
+      "version": 5,
+      "acceptedAt": "2026-10-24T04:23:59.562654+00:00"
+    }
+  ],
+  "committed": {
+    "ledgerCount": 1,
+    "acceptanceCount": 1,
+    "completionAuditCount": 1,
+    "completionOutboxCount": 1,
+    "pickupConsumed": true
+  }
+}

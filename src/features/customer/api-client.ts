@@ -20,11 +20,13 @@ export async function menuRequest<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch(path, {
     method,
     credentials: "include",
     cache: "no-store",
+    ...(signal ? { signal } : {}),
     headers:
       body === undefined
         ? { Accept: "application/json" }

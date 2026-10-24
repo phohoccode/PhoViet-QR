@@ -204,13 +204,17 @@ export const TakeawayPaymentView: React.FC<TakeawayPaymentViewProps> = ({
 
   const formattedTotal = new Intl.NumberFormat('vi-VN').format(currentOrder.totalVnd) + ' đ';
 
+  const heightClasses = className
+    ? className
+    : 'h-screen h-[100dvh] max-h-screen max-h-[100dvh]';
+
   return (
-    <div className={`min-h-screen bg-[#F5F6F5] text-[#1D2522] ${className}`}>
-      <div className="w-full max-w-lg mx-auto bg-white min-h-screen shadow-sm flex flex-col pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+    <div className={`w-full flex flex-col flex-1 min-h-0 bg-[#F5F6F5] text-[#1D2522] overflow-hidden ${heightClasses}`}>
+      <div className="w-full max-w-lg mx-auto bg-white flex flex-col h-full max-h-full flex-1 min-h-0 shadow-sm overflow-hidden">
         {/* ===================================================================
-            1. Header Thanh Điều Hướng
+            1. Header Thanh Điều Hướng (Cố định ở đỉnh, luôn hiển thị)
            =================================================================== */}
-        <header className="px-4 py-3 border-b border-[#E9ECEA] bg-white flex items-center justify-between sticky top-0 z-10">
+        <header className="px-4 py-3 border-b border-[#E9ECEA] bg-white flex items-center justify-between flex-shrink-0 z-20">
           <div className="flex items-center gap-2.5">
             {onBackToMenu && (
               <button
@@ -243,7 +247,7 @@ export const TakeawayPaymentView: React.FC<TakeawayPaymentViewProps> = ({
         {/* ===================================================================
             2. Vùng Cuộn Nội Dung Chính
            =================================================================== */}
-        <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+        <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto overscroll-contain">
           {/* Panel trạng thái thanh toán */}
           <PaymentStatusPanel
             status={activeStatus}
@@ -353,9 +357,9 @@ export const TakeawayPaymentView: React.FC<TakeawayPaymentViewProps> = ({
         </div>
 
         {/* ===================================================================
-            5. Khung Nút Hành Động Đáy (Sticky Footer CTAs)
+            5. Khung Nút Hành Động Đáy (Cố định ở đáy, luôn hiển thị)
            =================================================================== */}
-        <div className="p-4 bg-white border-t border-[#E9ECEA] space-y-2 sticky bottom-0 z-20">
+        <div className="p-4 bg-white border-t border-[#E9ECEA] space-y-2 flex-shrink-0 z-20 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
           {activeStatus === 'paid' ? (
             <button
               type="button"

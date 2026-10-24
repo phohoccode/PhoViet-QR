@@ -1,8 +1,22 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { fetchQrResolution, verifyPublicTableSession, fetchPublicMenu, menuRequest, MenuApiError } from "../../src/features/customer/api-client";
 import { openOwnerTableSession, updateOwnerTable, rotateOwnerQrCode } from "../../src/features/owner/api-client";
+import { getPrivateOrderTracking, getCustomerOrderTracking } from "../../src/features/orders/api-client";
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it("pickup tracking uses the order ID, guest cookie, no cache and a 15-second abort signal on both read paths", async () => {
+  const timeout = vi.spyOn(AbortSignal, "timeout");
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ data: {}, error: null })));
+  await getPrivateOrderTracking("order/id");
+  await getCustomerOrderTracking("order/id");
+  expect(timeout.mock.calls).toEqual([[15000], [15000]]);
+  expect(vi.mocked(fetch).mock.calls.map(([url]) => url)).toEqual(["/api/public/orders/order%2Fid?includePickup=true", "/api/public/orders/order%2Fid"]);
+  for (const [, init] of vi.mocked(fetch).mock.calls) {
+    expect(init).toMatchObject({ method: "GET", credentials: "include", cache: "no-store" });
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  }
+});
 
 it("uses credentialed no-store requests without retrying or changing command keys/timestamps", async () => {
   const transport = vi.fn(async () => Response.json({ data: { sentinel: true }, error: null }));

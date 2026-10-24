@@ -9,6 +9,9 @@ import {
 } from '../../../docs/contracts/types';
 import { generateQrMatrix, matrixToSvg } from '@/lib/qr/qr-code';
 import { createCartStore } from '@/features/cart';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { TakeawayPaymentView } from '@/components/customer/payment/TakeawayPaymentView';
 import {
   getOrderStatusBadgeConfig,
   getOrderStatusSubtitle,
@@ -371,6 +374,94 @@ describe('P4-G01 Acceptance: Alignment with Codex P4-C01 PayOS Contract', () => 
     };
     const isReady = Boolean(provisionedPayment.qrPayload || provisionedPayment.checkoutUrl);
     expect(isReady).toBe(true);
+  });
+
+  it('20. TakeawayPaymentView renders with bounded h-full and scrollable flex-1 min-h-0 container', () => {
+    const mockOrder: OrderDetail = {
+      id: 'ord-test-1',
+      version: 1,
+      storeId: 'c0230000-0000-4000-8000-000000000001',
+      type: 'takeaway',
+      status: 'pending_payment',
+      paymentStatus: 'pending',
+      ticketNo: null,
+      table: null,
+      itemCount: 1,
+      totalVnd: 35000,
+      lines: [
+        {
+          id: 'line-1',
+          menuItemId: 'c0220000-0000-4000-8000-000000000011',
+          name: 'Cà phê muối xứ Huế',
+          priceVnd: 35000,
+          quantity: 1,
+          lineTotalVnd: 35000,
+          options: [],
+          note: null,
+        },
+      ],
+      createdAt: '2026-10-24T00:00:00Z',
+      updatedAt: '2026-10-24T00:00:00Z',
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(TakeawayPaymentView, {
+        order: mockOrder,
+        qrCode: 'qr-test',
+      })
+    );
+
+    expect(html).toContain('overflow-y-auto');
+    expect(html).toContain('min-h-0');
+    expect(html).toContain('h-full');
+    expect(html).toContain('flex-shrink-0');
+    expect(html).toContain('h-[100dvh]');
+    expect(html).toContain('z-20');
+    expect(html).toContain('overscroll-contain');
+    expect(html).not.toContain('pb-[calc(6rem');
+  });
+
+  it('21. TakeawayPaymentView respects custom className when embedded in sheet and keeps header/footer fixed', () => {
+    const mockOrder: OrderDetail = {
+      id: 'ord-test-2',
+      version: 1,
+      storeId: 'c0230000-0000-4000-8000-000000000001',
+      type: 'takeaway',
+      status: 'pending_payment',
+      paymentStatus: 'pending',
+      ticketNo: null,
+      table: null,
+      itemCount: 1,
+      totalVnd: 35000,
+      lines: [
+        {
+          id: 'line-1',
+          menuItemId: 'c0220000-0000-4000-8000-000000000011',
+          name: 'Cà phê muối xứ Huế',
+          priceVnd: 35000,
+          quantity: 1,
+          lineTotalVnd: 35000,
+          options: [],
+          note: null,
+        },
+      ],
+      createdAt: '2026-10-24T00:00:00Z',
+      updatedAt: '2026-10-24T00:00:00Z',
+    };
+
+    const html = renderToStaticMarkup(
+      React.createElement(TakeawayPaymentView, {
+        order: mockOrder,
+        qrCode: 'qr-test',
+        className: 'h-full max-h-full',
+      })
+    );
+
+    expect(html).toContain('h-full max-h-full');
+    expect(html).toContain('overflow-y-auto');
+    expect(html).toContain('min-h-0');
+    expect(html).toContain('flex-shrink-0');
+    expect(html).toContain('z-20');
   });
 });
 

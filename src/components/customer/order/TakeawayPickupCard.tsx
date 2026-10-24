@@ -31,6 +31,7 @@ export interface TakeawayPickupCardProps {
   orderStatus: OrderStatus;
   pickupCode: string | null;
   isLoadingPickup?: boolean;
+  pickupMessage?: string | null;
   completedAt?: string | null;
   className?: string;
 }
@@ -52,6 +53,7 @@ export const TakeawayPickupCard: React.FC<TakeawayPickupCardProps> = ({
   orderStatus,
   pickupCode,
   isLoadingPickup = false,
+  pickupMessage = null,
   completedAt,
   className = '',
 }) => {
@@ -167,11 +169,15 @@ export const TakeawayPickupCard: React.FC<TakeawayPickupCardProps> = ({
                 {formattedCode}
               </span>
             </div>
-          ) : (
+          ) : isLoadingPickup ? (
             <div className="py-2 animate-pulse space-y-1">
               <div className="w-32 h-8 bg-[#E9ECEA] rounded-lg mx-auto" />
               <p className="text-[11px] text-[#727B77]">Đang chuẩn bị mã nhận món...</p>
             </div>
+          ) : (
+            <p role="status" className="text-[11px] text-[#727B77]">
+              {pickupMessage || 'Chưa có mã nhận món. Bấm Làm mới để kiểm tra hoặc liên hệ quầy.'}
+            </p>
           )}
 
           {/* Nút sao chép mã */}
@@ -280,7 +286,7 @@ export const TakeawayPickupCard: React.FC<TakeawayPickupCardProps> = ({
         <div className="p-3.5 rounded-xl bg-[#FAFBFB] border border-[#E9ECEA] flex items-center gap-2.5 text-xs text-[#55605C]">
           <Clock className="w-4 h-4 text-[#727B77] flex-shrink-0" aria-hidden="true" />
           <p className="text-[11px] leading-relaxed">
-            Hệ thống đang chuẩn bị mã nhận món. Quý khách vui lòng chờ trong giây lát.
+            {pickupMessage || 'Chưa có mã nhận món. Bấm Làm mới để kiểm tra hoặc liên hệ quầy.'}
           </p>
         </div>
       )}
