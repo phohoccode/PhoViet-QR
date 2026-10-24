@@ -17,6 +17,7 @@ export async function paymentRpc<T>(name: "p4_checkout" | "p4_ingest" | "p4_proc
   if (data.error) {
     switch (data.error) {
       case "RESOURCE_NOT_FOUND": case "PAYMENT_PROVIDER_UNAVAILABLE": throw new ApiFault(data.error);
+      case "ITEM_UNAVAILABLE": throw new OrderFault("ITEM_UNAVAILABLE", { menuItemIds: Array.isArray(data.menuItemIds) ? data.menuItemIds.filter((id: unknown) => typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id)).slice(0, 100) : [] });
       case "INVALID_QR": case "UNAUTHORIZED": case "FORBIDDEN": case "VALIDATION_ERROR": case "OUT_OF_STOCK": case "PRICE_CHANGED":
       case "DUPLICATE_REQUEST_CONFLICT": case "INVALID_STATE_TRANSITION": case "STORE_NOT_ACCEPTING_ORDERS": throw new OrderFault(data.error);
       case "RATE_LIMITED": throw new OrderFault("RATE_LIMITED", { retryAfterSeconds: Math.max(1, Math.min(60, Number(data.retryAfterSeconds) || 60)) });

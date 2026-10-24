@@ -99,12 +99,14 @@ try {
   // P2-G01 now owns a public QR shell; only the backend resolver decides validity.
   assert.equal((await request("/q/PHASE1_TEST_LOCATOR")).status, 200);
   assert.equal((await request("/api/public/qr/PHASE1_TEST_LOCATOR")).status, 404);
-  assert.equal((await request("/order/PHASE1_TEST_LOCATOR")).status, 404);
+  // P3/P4 now render a public tracking shell. Private data is authorized by
+  // the order API; the page route itself is no longer an unimplemented 404.
+  assert.equal((await request("/order/PHASE1_TEST_LOCATOR")).status, 200);
   const loginHtml = await (await request("/login")).text();
   const asset = loginHtml.match(/src="([^\"]*\/_next\/static\/[^\"]+\.js[^\"]*)"/);
   assert(asset, "Expected a Next static asset");
   assert.equal((await request(decode(asset[1]))).status, 200);
-  report("static assets/QR shell public; invalid QR API and unimplemented order page return 404");
+  report("static assets/QR/tracking shells public; invalid QR API returns 404");
   const wrong = await login(ownerEmail, `${randomUUID()}wrong`);
   assert.equal(wrong.status, 200);
   const wrongHtml = await wrong.text();

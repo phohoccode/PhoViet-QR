@@ -39,12 +39,12 @@ describe('StoreAdmissionControlCard — Admission Control Integration & UI', () 
     );
 
     // Header Master Gate toggle button
-    expect(html).toContain('Công tắc tổng:');
-    expect(html).toContain('Đang tắt');
+    expect(html).toContain('Trạng thái quán:');
+    expect(html).toContain('Tạm ngừng nhận đơn');
 
     // Master Gate warning banner
-    expect(html).toContain('Công tắc nhận đơn tổng đang tắt:');
-    expect(html).toContain('Cả hai kênh Tại bàn và Mang đi đều đang tạm ngừng nhận đơn trên toàn hệ thống');
+    expect(html).toContain('Quán đang tạm ngừng nhận đơn.');
+    expect(html).toContain('Cả hai hình thức Tại bàn và Mang đi đều đang tạm dừng.');
 
     // Effective availability: even though raw flags were true, effective status is paused!
     expect(html).not.toContain('Khách tại bàn có thể đặt món');

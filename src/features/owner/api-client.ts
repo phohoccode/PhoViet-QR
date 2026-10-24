@@ -1,10 +1,11 @@
-import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput, OpenTableSessionInput, OwnerSessionOpenedView, OrderingSettingsView, PatchOrderingSettingsInput } from "@contracts";
-import { menuRequest } from "@/features/customer/api-client";
+import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput, OpenTableSessionInput, OwnerSessionOpenedView, OrderingSettingsView, PatchOrderingSettingsInput, ApiResponse } from "@contracts";
+import { menuRequest, MenuApiError } from "@/features/customer/api-client";
+import { prepareMenuImage } from "./menu-image";
 import type { OwnerTablePinView, RotateTablePinInput } from "@contracts";
 import type { TableBillView, SettleSessionInput, SessionSettlementResult } from "@contracts";
 import type { OwnerOrdersQuery, OwnerOrdersView, RequestCommand, OrderDetail, OrderTransitionInput, CompleteOrderInput } from "@contracts";
 import type { OwnerTableList, OwnerTable, OwnerQrCode, CreateTableInput, UpdateTableInput, WriteQrInput, RotateQrInput } from "@/types/contracts/table-qr";
-export { MenuApiError } from "@/features/customer/api-client";
+export { MenuApiError };
 export const fetchOwnerMenu = (includeInactive = true): Promise<OwnerMenuView> => menuRequest(`/api/owner/menu?includeInactive=${includeInactive}`);
 export const createMenuItem = (input: CreateMenuItemInput): Promise<OwnerMenuItem> => menuRequest("/api/owner/menu", "POST", input);
 export const updateMenuItem = (id: string, input: PatchMenuItemInput): Promise<OwnerMenuItem> => menuRequest(`/api/owner/menu/${encodeURIComponent(id)}`, "PATCH", input);
@@ -32,4 +33,27 @@ export const fetchOwnerSessionBill = (id: string): Promise<TableBillView> => men
 export const settleOwnerSession = (id: string, input: SettleSessionInput): Promise<SessionSettlementResult> => menuRequest(`/api/owner/table-sessions/${encodeURIComponent(id)}/settle`, "POST", input);
 export const fetchOrderingSettings = (): Promise<OrderingSettingsView> => menuRequest("/api/owner/settings/ordering");
 export const patchOrderingSettings = (input: PatchOrderingSettingsInput): Promise<OrderingSettingsView> => menuRequest("/api/owner/settings/ordering", "PATCH", input);
+
+// Owner Hotfix 01: Xóa bàn trống, xóa danh mục, xóa món ăn, upload ảnh món
+export const deleteOwnerTable = (id: string): Promise<{ success: boolean } | void> =>
+  menuRequest(`/api/owner/tables/${encodeURIComponent(id)}`, "DELETE");
+export const deleteCategory = (id: string): Promise<{ success: boolean } | void> =>
+  menuRequest(`/api/owner/menu/categories/${encodeURIComponent(id)}`, "DELETE");
+export const deleteMenuItem = (id: string): Promise<{ success: boolean } | void> =>
+  menuRequest(`/api/owner/menu/${encodeURIComponent(id)}`, "DELETE");
+export const uploadMenuItemImage = async (file: File): Promise<{ url: string }> => {
+  const formData = new FormData();
+  formData.append("file", await prepareMenuImage(file));
+  const res = await fetch("/api/owner/menu/upload", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+    cache: "no-store",
+  });
+  const payload: ApiResponse<{ url: string }> | null = await res.json().catch(() => null);
+  if (!res.ok || !payload || payload.error !== null || !payload.data?.url) {
+    throw new MenuApiError(res.status, payload?.error ?? { code: "UPLOAD_FAILED", message: "Không thể tải ảnh lên máy chủ. Kiểm tra dịch vụ lưu trữ." });
+  }
+  return payload.data;
+};
 

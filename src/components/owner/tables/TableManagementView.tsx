@@ -11,6 +11,9 @@ import {
   MoreVertical,
   UtensilsCrossed,
   Clock,
+  Trash2,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import type {
   OwnerSessionOpenedView,
@@ -19,6 +22,7 @@ import type { OwnerTable, OwnerQrCode } from '@/types/contracts/table-qr';
 import {
   openOwnerTableSession,
   updateOwnerTable,
+  deleteOwnerTable,
   fetchOwnerSessionBill,
   settleOwnerSession,
   MenuApiError,
@@ -41,6 +45,9 @@ export interface TableManagementViewProps {
   onRefresh?: () => void;
   onTableCreated?: (table: OwnerTable, createdQrPath?: string | null) => void;
   onTableUpdated?: (table: OwnerTable) => void;
+  // Owner HF01 Delete Table props
+  onDeleteTable?: (tableId: string) => Promise<boolean | void>;
+  onTableDeleted?: (tableId: string) => void;
   // P2-HF01 PIN lifecycle props
   onRevealTablePin?: (tableId: string) => Promise<{ pin: string; isLegacy?: boolean }>;
   onRotateTablePin?: (tableId: string) => Promise<{ pin: string }>;
@@ -73,7 +80,7 @@ export interface TableManagementViewProps {
  * - Danh sách bàn dạng lưới chuẩn Minimal Emerald POS (1 cột mobile, 2-3 cột tablet, 4-6 cột desktop).
  * - Tình trạng bàn: Đang trống / Có khách / Đang thanh toán / Ngưng sử dụng.
  * - Tình trạng QR: Đã có QR / Chưa có QR / QR bị khóa.
- * - CTA Thêm bàn, Sửa nhãn, Xem QR, In QR, Mở phiên bàn (R12), Bật/Tắt bàn.
+ * - CTA Thêm bàn, Sửa nhãn, Xem QR, In QR, Mở phiên bàn (R12), Bật/Tắt bàn, Xóa bàn trống (HF01).
  */
 export const TableManagementView: React.FC<TableManagementViewProps> = ({
   tables,
@@ -84,6 +91,8 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
   onRefresh,
   onTableCreated,
   onTableUpdated,
+  onDeleteTable,
+  onTableDeleted,
   onRevealTablePin,
   onRotateTablePin,
   onMigrateLegacyTablePin,
@@ -154,6 +163,64 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
     if (filterMode === 'inactive') return !t.active;
     return true;
   });
+
+  // Xóa bàn trống (Giao diện A - Owner HF01)
+  const [tableToDelete, setTableToDelete] = useState<OwnerTable | null>(null);
+  const [isDeletingTable, setIsDeletingTable] = useState(false);
+  const [deleteTableError, setDeleteTableError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (type: 'success' | 'error' | 'info', message: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ type, message });
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+    }, 4000);
+  };
+
+  const handleConfirmDeleteTable = async () => {
+    if (!tableToDelete) return;
+    setIsDeletingTable(true);
+    setDeleteTableError(null);
+
+    try {
+      if (onDeleteTable) {
+        await onDeleteTable(tableToDelete.id);
+      } else {
+        await deleteOwnerTable(tableToDelete.id);
+      }
+      onTableDeleted?.(tableToDelete.id);
+      onRefresh?.();
+      showToast('success', `Đã xóa ${tableToDelete.label} thành công.`);
+      setTableToDelete(null);
+    } catch (err: unknown) {
+      if (err instanceof MenuApiError) {
+        if (err.status === 409) {
+          const msg = 'Bàn đang được sử dụng hoặc còn giao dịch chưa hoàn tất.';
+          setDeleteTableError(msg);
+          showToast('error', msg);
+          onRefresh?.();
+          return;
+        }
+        if (err.status === 401 || err.status === 403) {
+          const msg = 'Bạn không có quyền xóa bàn này.';
+          setDeleteTableError(msg);
+          showToast('error', msg);
+          return;
+        }
+        const msg = err.error?.message || 'Không thể xóa bàn trên máy chủ.';
+        setDeleteTableError(msg);
+        showToast('error', msg);
+      } else {
+        const msg = err instanceof Error ? err.message : 'Lỗi kết nối khi xóa bàn. Vui lòng thử lại.';
+        setDeleteTableError(msg);
+        showToast('error', msg);
+      }
+    } finally {
+      setIsDeletingTable(false);
+    }
+  };
 
   // Gọi R12 POST /api/owner/tables/:id/sessions để mở phiên bàn mới bằng typed client
   const handleOpenTableSession = async (table: OwnerTable) => {
@@ -546,6 +613,40 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
                                 : 'Bật dùng lại'}
                             </span>
                           </button>
+
+                          <div className="my-1 border-t border-[#E9ECEA]" />
+
+                          {/* Xóa bàn trống (HF01) */}
+                          {(() => {
+                            const canDeleteTable = !isOccupied && (t as { canDelete?: boolean }).canDelete !== false;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenMenuTableId(null);
+                                  setDeleteTableError(null);
+                                  setTableToDelete(t);
+                                }}
+                                disabled={!canDeleteTable}
+                                title={
+                                  isOccupied
+                                    ? 'Không thể xóa bàn đang có khách hoặc phiên hoạt động'
+                                    : (t as { canDelete?: boolean }).canDelete === false
+                                    ? 'Bàn không được phép xóa'
+                                    : `Xóa ${t.label}`
+                                }
+                                className={`w-full px-3 py-2 text-left flex items-center gap-2 ${
+                                  !canDeleteTable
+                                    ? 'text-[#A0A8A5] cursor-not-allowed'
+                                    : 'text-[#B42318] hover:bg-[#FEF3F2]'
+                                }`}
+                                role="menuitem"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                                <span>Xóa bàn</span>
+                              </button>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -820,6 +921,111 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
             onRefresh?.();
           }}
         />
+      )}
+
+      {/* Dialog xác nhận Xóa bàn trống (AlertDialog) */}
+      {tableToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-table-title"
+          aria-describedby="delete-table-desc"
+        >
+          <div
+            className="fixed inset-0 -z-10"
+            onClick={() => !isDeletingTable && setTableToDelete(null)}
+            aria-hidden="true"
+          />
+          <div className="w-full max-w-md bg-white rounded-2xl border border-[#E9ECEA] shadow-xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-[#B42318]" aria-hidden="true" />
+              </div>
+              <div>
+                <h3 id="delete-table-title" className="text-base font-bold text-[#1D2522]">
+                  Bạn muốn xóa {tableToDelete.label}?
+                </h3>
+                <p className="text-xs text-[#727B77]">Hành động này sẽ xóa bàn khỏi hệ thống</p>
+              </div>
+            </div>
+
+            <div id="delete-table-desc" className="space-y-2 text-xs text-[#55605C] bg-[#F7F8F7] p-3 rounded-xl border border-[#E9ECEA]">
+              <p>
+                Mã QR của <strong>{tableToDelete.label}</strong> sẽ ngừng hoạt động. Khách hàng sẽ không thể quét mã để xem menu hoặc đặt món nữa.
+              </p>
+              <p className="text-[11px] text-[#727B77]">
+                Lịch sử các đơn hàng cũ và hóa đơn liên quan đến bàn này vẫn được lưu trữ nguyên vẹn để đối soát.
+              </p>
+            </div>
+
+            {deleteTableError && (
+              <div className="p-3 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-start gap-2 text-xs text-[#912018]">
+                <AlertCircle className="w-4 h-4 text-[#B42318] flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{deleteTableError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingTable}
+                onClick={() => setTableToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#F1F3F2] hover:bg-[#E9ECEA] text-[#55605C] transition-colors focus:outline-none focus:ring-2 focus:ring-[#35977D]"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingTable}
+                onClick={handleConfirmDeleteTable}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#B42318] hover:bg-[#912018] text-white flex items-center gap-1.5 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#B42318] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDeletingTable ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Xóa bàn</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Thông báo Toast nổi Sonner-style */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-xs font-semibold tracking-wide border animate-in slide-in-from-bottom-2 duration-200 ${
+            toast.type === 'success'
+              ? 'bg-[#1D2522] text-white border-[#35977D]/40'
+              : toast.type === 'error'
+              ? 'bg-[#B42318] text-white border-[#FECDCA]/40'
+              : 'bg-[#1D2522] text-white border-[#E9ECEA]'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-[#35977D] shrink-0" aria-hidden="true" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-white shrink-0" aria-hidden="true" />
+          )}
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-2 text-white/70 hover:text-white"
+            aria-label="Đóng thông báo"
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );

@@ -7,8 +7,15 @@ export const MENU_IMAGE_HOSTS = ["images.unsplash.com"] as const;
 export const menuImageUrl = z.string().max(2048).url().refine(value => {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password && !url.port &&
-      !value.includes("#") && MENU_IMAGE_HOSTS.some(host => url.hostname === host);
+    return !url.username && !url.password && !value.includes("#") &&
+      ((url.protocol === "https:" && !url.port && MENU_IMAGE_HOSTS.some(host => url.hostname === host)) || (() => {
+        const configured = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if (!configured) return false;
+        const base = new URL(configured);
+        const safeProtocol = base.protocol === "https:" || (base.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(base.hostname));
+        return safeProtocol && url.origin === base.origin && !url.search &&
+          /^\/storage\/v1\/object\/public\/menu-images\/stores\/[a-f0-9-]{36}\/uploads\/[a-f0-9-]{36}\.(jpg|png|webp)$/.test(url.pathname);
+      })());
   } catch { return false; }
 }, "Ảnh phải là HTTPS trên host ảnh được hỗ trợ.").transform(value => new URL(value).toString()).nullable();
 export const menuName = z.string().trim().min(1).max(120);
@@ -39,6 +46,6 @@ const itemView = z.strictObject({ id: resourceId, categoryId: resourceId, name: 
 export const publicMenuResponse = z.strictObject({ categories: z.array(categoryView), items: z.array(itemView), menuRevision: z.string().min(1).max(128), serverTime: timestamp,
   orderingAvailability: z.strictObject({ orderType: z.enum(['dine_in', 'takeaway']), acceptingOrders: z.boolean(), reason: z.literal('manual_pause').optional() }).optional(),
 }) satisfies z.ZodType<MenuV1View>;
-export const ownerMenuItemResponse = itemView.extend({ active: z.boolean() }) satisfies z.ZodType<OwnerMenuItem>;
-export const ownerCategoryResponse = categoryView.extend({ active: z.boolean(), updatedAt: timestamp }) satisfies z.ZodType<OwnerMenuCategory>;
+export const ownerMenuItemResponse = itemView.extend({ active: z.boolean(), imagePath: z.string().nullable().optional(), archivedAt: timestamp.nullable().optional() }) satisfies z.ZodType<OwnerMenuItem>;
+export const ownerCategoryResponse = categoryView.extend({ active: z.boolean(), updatedAt: timestamp, archivedAt: timestamp.nullable().optional() }) satisfies z.ZodType<OwnerMenuCategory>;
 export const ownerMenuResponse = publicMenuResponse.extend({ categories: z.array(categoryView.extend({ active: z.boolean() })), items: z.array(ownerMenuItemResponse) }) satisfies z.ZodType<OwnerMenuView>;

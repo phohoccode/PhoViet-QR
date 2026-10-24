@@ -7,6 +7,7 @@ import {
   Search,
   X,
   Edit2,
+  Trash2,
   FolderPlus,
   RefreshCw,
   AlertCircle,
@@ -22,6 +23,8 @@ import {
   fetchOwnerMenu,
   updateMenuItem,
   fetchCategories,
+  deleteCategory,
+  deleteMenuItem,
   MenuApiError,
 } from '../../../features/owner/api-client';
 import { OwnerMenuItemForm } from './OwnerMenuItemForm';
@@ -29,6 +32,12 @@ import { OwnerCategoryDialog } from './OwnerCategoryDialog';
 
 type CategoryItem = MenuCategory & { active: boolean; updatedAt?: string };
 type StatusFilter = 'all' | 'available' | 'out_of_stock' | 'hidden';
+
+export interface OwnerMenuViewProps {
+  onDeleteCategory?: (categoryId: string) => Promise<boolean | void>;
+  onDeleteMenuItem?: (itemId: string) => Promise<boolean | void>;
+  onUploadImage?: (file: File) => Promise<{ url: string }>;
+}
 
 /**
  * Hàm chuẩn hóa loại bỏ dấu tiếng Việt để tìm kiếm không phân biệt hoa/thường và dấu
@@ -74,7 +83,11 @@ const OwnerMenuSkeleton: React.FC = () => (
  * OwnerMenuView — Giao diện chính tab Thực đơn trong Dashboard Chủ quán (P2-G02).
  * Hỗ trợ bố cục 65/35 trên Desktop và 1 cột trên Mobile/Tablet.
  */
-export const OwnerMenuView: React.FC = () => {
+export const OwnerMenuView: React.FC<OwnerMenuViewProps> = ({
+  onDeleteCategory,
+  onDeleteMenuItem,
+  onUploadImage,
+}) => {
   // Menu data states
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [items, setItems] = useState<OwnerMenuItem[]>([]);
@@ -97,6 +110,108 @@ export const OwnerMenuView: React.FC = () => {
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(
     null
   );
+
+  // HF01: Xóa danh mục state
+  const [categoryToDelete, setCategoryToDelete] = useState<{
+    category: CategoryItem;
+    itemCount: number;
+  } | null>(null);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+  const [deleteCategoryError, setDeleteCategoryError] = useState<string | null>(null);
+
+  // HF01: Xóa món ăn state
+  const [itemToDelete, setItemToDelete] = useState<OwnerMenuItem | null>(null);
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
+  const [deleteItemError, setDeleteItemError] = useState<string | null>(null);
+
+  const handleRequestDeleteCategory = (cat: CategoryItem) => {
+    const count = items.filter((i) => i.categoryId === cat.id).length;
+    setDeleteCategoryError(null);
+    setCategoryToDelete({ category: cat, itemCount: count });
+  };
+
+  const handleConfirmDeleteCategory = async () => {
+    if (!categoryToDelete) return;
+    const cat = categoryToDelete.category;
+
+    // Kiểm tra xem danh mục có món hay không
+    const count = items.filter((i) => i.categoryId === cat.id).length;
+    if (count > 0) {
+      setDeleteCategoryError('Danh mục vẫn chứa món. Hãy chuyển hoặc xóa các món trước.');
+      return;
+    }
+
+    setIsDeletingCategory(true);
+    setDeleteCategoryError(null);
+
+    try {
+      if (onDeleteCategory) {
+        await onDeleteCategory(cat.id);
+      } else {
+        await deleteCategory(cat.id);
+      }
+
+      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+      if (selectedCategoryId === cat.id) {
+        setSelectedCategoryId('all');
+      }
+      setNotification({
+        type: 'success',
+        message: `Đã xóa danh mục "${cat.name}" thành công.`,
+      });
+      setCategoryToDelete(null);
+    } catch (err: unknown) {
+      if (err instanceof MenuApiError) {
+        if (err.status === 409 || err.status === 400) {
+          const msg = 'Danh mục vẫn chứa món. Hãy chuyển hoặc xóa các món trước.';
+          setDeleteCategoryError(msg);
+          setNotification({ type: 'error', message: msg });
+          return;
+        }
+        const msg = err.error?.message || 'Không thể xóa danh mục trên máy chủ.';
+        setDeleteCategoryError(msg);
+        setNotification({ type: 'error', message: msg });
+      } else {
+        const msg = err instanceof Error ? err.message : 'Lỗi kết nối khi xóa danh mục.';
+        setDeleteCategoryError(msg);
+        setNotification({ type: 'error', message: msg });
+      }
+    } finally {
+      setIsDeletingCategory(false);
+    }
+  };
+
+  const handleConfirmDeleteItem = async () => {
+    if (!itemToDelete) return;
+    setIsDeletingItem(true);
+    setDeleteItemError(null);
+
+    try {
+      if (onDeleteMenuItem) {
+        await onDeleteMenuItem(itemToDelete.id);
+      } else {
+        await deleteMenuItem(itemToDelete.id);
+      }
+
+      setItems((prev) => prev.filter((it) => it.id !== itemToDelete.id));
+      setNotification({
+        type: 'success',
+        message: `Đã xóa món "${itemToDelete.name}" thành công.`,
+      });
+      setItemToDelete(null);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof MenuApiError
+          ? err.error?.message || 'Không thể xóa món ăn trên máy chủ.'
+          : err instanceof Error
+          ? err.message
+          : 'Lỗi kết nối khi xóa món ăn.';
+      setDeleteItemError(msg);
+      setNotification({ type: 'error', message: msg });
+    } finally {
+      setIsDeletingItem(false);
+    }
+  };
 
   // Tải dữ liệu thực đơn từ API R16 (GET /api/owner/menu?includeInactive=true) và R17 categories
   const loadMenu = useCallback(async () => {
@@ -449,23 +564,51 @@ export const OwnerMenuView: React.FC = () => {
           >
             Tất cả danh mục
           </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setSelectedCategoryId(cat.id)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1 ${
-                selectedCategoryId === cat.id
-                  ? 'bg-[#1D725E] text-white'
-                  : 'bg-white border border-[#E9ECEA] text-[#55605C] hover:bg-[#F7F8F7]'
-              }`}
-            >
-              <span>{cat.name}</span>
-              {!cat.active && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[#FDA29B]" title="Đang ẩn" />
-              )}
-            </button>
-          ))}
+          {categories.map((cat) => {
+            const isSelected = selectedCategoryId === cat.id;
+            return (
+              <div
+                key={cat.id}
+                className={`inline-flex items-center rounded-full text-xs font-semibold whitespace-nowrap transition-colors border ${
+                  isSelected
+                    ? 'bg-[#1D725E] text-white border-[#1D725E]'
+                    : 'bg-white border border-[#E9ECEA] text-[#55605C] hover:bg-[#F7F8F7]'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryId(cat.id)}
+                  className="pl-3 pr-1 py-1 flex items-center gap-1 focus:outline-none"
+                >
+                  <span>{cat.name}</span>
+                  {!cat.active && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#FDA29B]" title="Đang ẩn" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRequestDeleteCategory(cat);
+                  }}
+                  title={`Xóa danh mục ${cat.name}`}
+                  aria-label={`Xóa danh mục ${cat.name}`}
+                  className={`pr-2.5 pl-1 py-1 transition-colors flex items-center justify-center rounded-r-full focus:outline-none ${
+                    isSelected
+                      ? 'text-white/70 hover:text-white hover:bg-black/10'
+                      : 'text-[#727B77] hover:text-[#B42318] hover:bg-[#FEF3F2]'
+                  }`}
+                >
+                  <Trash2 className="w-3 h-3" aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
+          {categories.length === 0 && (
+            <span className="text-xs text-[#727B77] italic ml-1">
+              Chưa có danh mục nào.
+            </span>
+          )}
         </div>
       </div>
 
@@ -616,19 +759,35 @@ export const OwnerMenuView: React.FC = () => {
                         <span>{isItemMutating ? 'Đang lưu...' : item.available ? 'Còn hàng' : 'Hết hàng'}</span>
                       </button>
 
-                      {/* Nút sửa */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenEdit(item);
-                        }}
-                        className="h-8 px-2.5 rounded-xl bg-[#F7F8F7] hover:bg-[#E8F4F0] hover:text-[#1D725E] text-[#55605C] border border-[#E9ECEA] hover:border-[#C6E7DC] flex items-center gap-1 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
-                        aria-label={`Chỉnh sửa ${item.name}`}
-                      >
-                        <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span>Sửa</span>
-                      </button>
+                      {/* Nhóm thao tác Sửa / Xóa */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(item);
+                          }}
+                          className="h-8 px-2.5 rounded-xl bg-[#F7F8F7] hover:bg-[#E8F4F0] hover:text-[#1D725E] text-[#55605C] border border-[#E9ECEA] hover:border-[#C6E7DC] flex items-center gap-1 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+                          aria-label={`Chỉnh sửa ${item.name}`}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Sửa</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteItemError(null);
+                            setItemToDelete(item);
+                          }}
+                          className="h-8 w-8 rounded-xl bg-[#F7F8F7] hover:bg-[#FEF3F2] text-[#727B77] hover:text-[#B42318] border border-[#E9ECEA] hover:border-[#FECDCA] flex items-center justify-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#B42318]"
+                          title={`Xóa món ${item.name}`}
+                          aria-label={`Xóa món ${item.name}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -651,6 +810,7 @@ export const OwnerMenuView: React.FC = () => {
             setSelectedItemForEdit(null);
           }}
           onSaved={handleItemSaved}
+          onUploadImage={onUploadImage}
         />
       )}
 
@@ -661,6 +821,186 @@ export const OwnerMenuView: React.FC = () => {
         onCategoryCreated={handleCategoryCreated}
         existingCategoriesCount={categories.length}
       />
+
+      {/* AlertDialog: Xác nhận Xóa danh mục (Giao diện B - HF01) */}
+      {categoryToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-category-title"
+          aria-describedby="delete-category-desc"
+        >
+          <div
+            className="fixed inset-0 -z-10"
+            onClick={() => !isDeletingCategory && setCategoryToDelete(null)}
+            aria-hidden="true"
+          />
+          <div className="w-full max-w-md bg-white rounded-2xl border border-[#E9ECEA] shadow-xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                  categoryToDelete.itemCount > 0
+                    ? 'bg-[#FEF6EE] border border-[#F9DBAF]'
+                    : 'bg-[#FEF3F2] border border-[#FECDCA]'
+                }`}
+              >
+                {categoryToDelete.itemCount > 0 ? (
+                  <AlertCircle className="w-5 h-5 text-[#B54708]" aria-hidden="true" />
+                ) : (
+                  <Trash2 className="w-5 h-5 text-[#B42318]" aria-hidden="true" />
+                )}
+              </div>
+              <div>
+                <h3 id="delete-category-title" className="text-base font-bold text-[#1D2522]">
+                  {categoryToDelete.itemCount > 0
+                    ? `Không thể xóa danh mục "${categoryToDelete.category.name}"`
+                    : `Xóa danh mục "${categoryToDelete.category.name}"?`}
+                </h3>
+                <p className="text-xs text-[#727B77]">Quản lý cấu trúc thực đơn</p>
+              </div>
+            </div>
+
+            <div id="delete-category-desc" className="space-y-2 text-xs text-[#55605C] bg-[#F7F8F7] p-3 rounded-xl border border-[#E9ECEA]">
+              {categoryToDelete.itemCount > 0 ? (
+                <p className="text-[#B54708] font-medium">
+                  Danh mục vẫn chứa {categoryToDelete.itemCount} món. Hãy chuyển hoặc xóa các món trước.
+                </p>
+              ) : (
+                <p>
+                  Danh mục này hiện không chứa món ăn nào. Khi xóa, danh mục sẽ biến mất khỏi bộ lọc và thực đơn của khách hàng.
+                </p>
+              )}
+            </div>
+
+            {deleteCategoryError && (
+              <div className="p-3 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-start gap-2 text-xs text-[#912018]">
+                <AlertCircle className="w-4 h-4 text-[#B42318] flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{deleteCategoryError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              {categoryToDelete.itemCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setCategoryToDelete(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#1D725E] text-white hover:bg-[#165B4B] transition-colors focus:outline-none focus:ring-2 focus:ring-[#1D725E]"
+                >
+                  Đã hiểu
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={isDeletingCategory}
+                    onClick={() => setCategoryToDelete(null)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#F1F3F2] hover:bg-[#E9ECEA] text-[#55605C] transition-colors focus:outline-none focus:ring-2 focus:ring-[#35977D]"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDeletingCategory}
+                    onClick={handleConfirmDeleteCategory}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-[#B42318] hover:bg-[#912018] text-white flex items-center gap-1.5 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#B42318] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {isDeletingCategory ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                        <span>Đang xóa...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Xóa danh mục</span>
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AlertDialog: Xác nhận Xóa món ăn (Giao diện C - HF01) */}
+      {itemToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-item-title"
+          aria-describedby="delete-item-desc"
+        >
+          <div
+            className="fixed inset-0 -z-10"
+            onClick={() => !isDeletingItem && setItemToDelete(null)}
+            aria-hidden="true"
+          />
+          <div className="w-full max-w-md bg-white rounded-2xl border border-[#E9ECEA] shadow-xl p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5 text-[#B42318]" aria-hidden="true" />
+              </div>
+              <div>
+                <h3 id="delete-item-title" className="text-base font-bold text-[#1D2522]">
+                  Xóa món “{itemToDelete.name}”?
+                </h3>
+                <p className="text-xs text-[#727B77]">Gỡ món khỏi thực đơn của quán</p>
+              </div>
+            </div>
+
+            <div id="delete-item-desc" className="space-y-2 text-xs text-[#55605C] bg-[#F7F8F7] p-3 rounded-xl border border-[#E9ECEA]">
+              <p>
+                Món ăn này sẽ biến mất khỏi thực đơn dành cho khách hàng. Khách quét mã QR sẽ không thể nhìn thấy hoặc gọi món này nữa.
+              </p>
+              <p className="text-[11px] text-[#727B77]">
+                Lịch sử các đơn hàng cũ đã đặt và báo cáo doanh thu vẫn được lưu trữ nguyên vẹn để đối soát.
+              </p>
+              <p className="text-[11px] text-[#1D725E] font-medium pt-1 border-t border-[#E9ECEA]">
+                Mẹo: Nếu quán chỉ tạm hết hàng hoặc muốn tạm ẩn món, bạn có thể bấm &quot;Còn hàng&quot; để đổi sang &quot;Hết hàng&quot; hoặc chọn &quot;Đã ẩn&quot; thay vì xóa món.
+              </p>
+            </div>
+
+            {deleteItemError && (
+              <div className="p-3 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-start gap-2 text-xs text-[#912018]">
+                <AlertCircle className="w-4 h-4 text-[#B42318] flex-shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{deleteItemError}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingItem}
+                onClick={() => setItemToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#F1F3F2] hover:bg-[#E9ECEA] text-[#55605C] transition-colors focus:outline-none focus:ring-2 focus:ring-[#35977D]"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingItem}
+                onClick={handleConfirmDeleteItem}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#B42318] hover:bg-[#912018] text-white flex items-center gap-1.5 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#B42318] disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {isDeletingItem ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                    <span>Đang xóa...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Xóa món</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

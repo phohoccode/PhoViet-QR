@@ -14,6 +14,7 @@ const errors = {
   SESSION_EXPIRED: [410, "Phiên bàn hoặc quyền truy cập đã hết hiệu lực."],
   SESSION_CHECKOUT_PENDING: [409, "Bàn đang thanh toán, chưa thể đặt thêm món."],
   OUT_OF_STOCK: [409, "Một số món trong giỏ không còn bán."],
+  ITEM_UNAVAILABLE: [409, "Một số món trong giỏ không còn bán. Vui lòng chọn lại."],
   PRICE_CHANGED: [409, "Thực đơn đã thay đổi. Vui lòng xem lại giỏ hàng."],
   STORE_NOT_ACCEPTING_ORDERS: [409, "Quán đang tạm ngừng nhận đơn."],
   DUPLICATE_REQUEST_CONFLICT: [409, "Mã yêu cầu đã được dùng cho nội dung khác."],
@@ -40,6 +41,7 @@ export async function executeOrder<T>(action: "create" | "get", input: Record<st
       const code: OrderErrorCode = Object.hasOwn(errors, data.error) ? data.error : "INTERNAL_ERROR";
       const details: ApiErrorDetails | undefined = code === "RATE_LIMITED"
         ? { retryAfterSeconds: Math.max(1, Math.min(60, Number(data.retryAfterSeconds) || 60)) }
+        : code === "ITEM_UNAVAILABLE" ? { menuItemIds: Array.isArray(data.menuItemIds) ? data.menuItemIds.filter((id: unknown) => typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id)).slice(0, 100) : [] }
         : code === "INVALID_STATE_TRANSITION" ? { field: "orderType" } : undefined;
       throw new OrderFault(code, details);
     }

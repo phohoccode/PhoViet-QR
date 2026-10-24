@@ -4,6 +4,8 @@ import { requireApiOwner } from "@/server/security/owner";
 import { createMenuItemInput, ownerMenuQuery } from "@/lib/validations/menu";
 import { createMenuItem, fetchOwnerMenu } from "@/server/menu/service";
 import { menuFailure } from "@/server/menu/database";
+import { after } from "next/server";
+import { cleanupMenuImages } from "@/server/menu/storage";
 export const runtime = "nodejs";
 export async function GET(request: NextRequest) {
   try {
@@ -11,6 +13,7 @@ export async function GET(request: NextRequest) {
     const entries = [...request.nextUrl.searchParams];
     if (entries.length > 1) throw new ApiFault("VALIDATION_ERROR");
     const { includeInactive } = validate(ownerMenuQuery, Object.fromEntries(entries));
+    after(async () => { await cleanupMenuImages(owner.storeId).catch(() => undefined); });
     return apiSuccess(await fetchOwnerMenu(owner, includeInactive));
   } catch (error) { return menuFailure(error); }
 }

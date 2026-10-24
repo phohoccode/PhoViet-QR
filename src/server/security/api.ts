@@ -5,6 +5,12 @@ import { z } from "zod";
 import type { ApiErrorCode, ApiErrorDetails, ApiResponse } from "@contracts";
 
 const messages: Partial<Record<ApiErrorCode, string>> = {
+  TABLE_IN_USE: "Bàn còn phiên đang mở, đơn chưa phục vụ hoặc hóa đơn chưa thanh toán.",
+  CATEGORY_NOT_EMPTY: "Danh mục vẫn còn món. Hãy chuyển món trước khi xóa danh mục.",
+  ITEM_UNAVAILABLE: "Một số món trong giỏ không còn bán. Vui lòng chọn lại.",
+  FILE_TOO_LARGE: "Ảnh phải có kích thước tối đa 5 MiB.",
+  UNSUPPORTED_MEDIA_TYPE: "Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP hợp lệ.",
+  UPLOAD_FAILED: "Chưa thể lưu ảnh. Vui lòng thử lại.",
   BILL_CHANGED: "Hóa đơn đã thay đổi. Vui lòng tải lại và chốt hóa đơn mới.",
   SESSION_ORDERS_OUTSTANDING: "Còn đơn chưa phục vụ xong. Hoàn tất giao món trước khi thu tiền.",
   INVALID_PICKUP_CODE: "Mã nhận món không hợp lệ hoặc đã hết hiệu lực.",
@@ -31,6 +37,8 @@ const messages: Partial<Record<ApiErrorCode, string>> = {
   INTERNAL_ERROR: "Dịch vụ tạm thời không khả dụng. Vui lòng thử lại.",
 };
 const statuses: Partial<Record<ApiErrorCode, number>> = {
+  TABLE_IN_USE: 409, CATEGORY_NOT_EMPTY: 409, ITEM_UNAVAILABLE: 409,
+  FILE_TOO_LARGE: 413, UNSUPPORTED_MEDIA_TYPE: 415, UPLOAD_FAILED: 503,
   BILL_CHANGED: 409, SESSION_ORDERS_OUTSTANDING: 409,
   INVALID_PICKUP_CODE: 422, PICKUP_NOT_ALLOWED: 409,
   PICKUP_CREDENTIAL_UNAVAILABLE: 503, ORDER_ALREADY_COMPLETED: 409,

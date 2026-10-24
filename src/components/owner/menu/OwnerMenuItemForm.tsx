@@ -6,12 +6,12 @@ import {
   X,
   Plus,
   Trash2,
-  Coffee,
   Loader2,
   AlertCircle,
   CheckCircle2,
   Sparkles,
-  Info,
+  Upload,
+  RotateCcw,
 } from 'lucide-react';
 import type {
   OwnerMenuItem,
@@ -20,7 +20,7 @@ import type {
   PatchMenuItemInput,
   MenuOptionWrite,
 } from '../../../../docs/contracts/types';
-import { createMenuItem, updateMenuItem, MenuApiError } from '../../../features/owner/api-client';
+import { createMenuItem, updateMenuItem, uploadMenuItemImage, MenuApiError } from '../../../features/owner/api-client';
 
 interface OwnerMenuItemFormProps {
   item: OwnerMenuItem | null;
@@ -28,6 +28,7 @@ interface OwnerMenuItemFormProps {
   isOpen?: boolean;
   onClose?: () => void;
   onSaved?: (savedItem: OwnerMenuItem) => void;
+  onUploadImage?: (file: File) => Promise<{ url: string }>;
   isSidePanel?: boolean;
   className?: string;
 }
@@ -60,6 +61,7 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
   isOpen = true,
   onClose,
   onSaved,
+  onUploadImage,
   isSidePanel = false,
   className = '',
 }) => {
@@ -87,6 +89,30 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
       })) || []
   );
 
+  // Image Upload state (HF01)
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(() => item?.imageUrl || null);
+  const [isObjectUrl, setIsObjectUrl] = useState<boolean>(false);
+  const [uploadStatus, setUploadStatus] = useState<
+    'idle' | 'validating' | 'uploading' | 'uploaded' | 'failed'
+  >('idle');
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+
+  // Dọn dẹp object URL khi unmount hoặc đổi ảnh để tránh rò rỉ bộ nhớ
+  const cleanupPreview = useCallback(() => {
+    if (isObjectUrl && previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+  }, [isObjectUrl, previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      cleanupPreview();
+    };
+  }, [cleanupPreview]);
+
   // Validation & Mutation states
   const pendingRequestIdRef = useRef<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -99,12 +125,18 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
 
   if (item !== prevItem) {
     setPrevItem(item);
+    cleanupPreview();
+    setSelectedFile(null);
+    setUploadStatus('idle');
+    setUploadError(null);
+    setIsObjectUrl(false);
     if (item) {
       setName(item.name || '');
       setCategoryId(item.categoryId || (categories[0]?.id ?? ''));
       setPriceDisplay(formatNumberInput(item.priceVnd));
       setDescription(item.description || '');
       setImageUrl(item.imageUrl || '');
+      setPreviewUrl(item.imageUrl || null);
       setIsAvailable(item.available);
       setIsActive(item.active);
       setOptions(
@@ -121,6 +153,7 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
       setPriceDisplay('');
       setDescription('');
       setImageUrl('');
+      setPreviewUrl(null);
       setIsAvailable(true);
       setIsActive(true);
       setOptions([]);
@@ -135,12 +168,13 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
   // Đóng dialog với animation thoát nhẹ nhàng
   const handleAnimatedClose = useCallback(() => {
     if (isSubmitting) return;
+    cleanupPreview();
     setIsClosing(true);
     setTimeout(() => {
       onClose?.();
       setIsClosing(false);
     }, 180);
-  }, [isSubmitting, onClose]);
+  }, [isSubmitting, cleanupPreview, onClose]);
 
   // Reset requestId khi item thay đổi hoặc dialog đóng
   useEffect(() => {
@@ -186,6 +220,113 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
     );
   };
 
+  // HF01: Các hàm xử lý upload ảnh món ăn từ thiết bị
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const handleProcessFile = async (file: File) => {
+    setUploadError(null);
+    setUploadStatus('validating');
+
+    // 1. Kiểm tra định dạng (JPG, PNG, WebP)
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setUploadStatus('failed');
+      setUploadError('Định dạng không được hỗ trợ. Chỉ chấp nhận ảnh JPG, PNG hoặc WebP.');
+      return;
+    }
+
+    // 2. Kiểm tra dung lượng (tối đa 5 MB = 5 * 1024 * 1024 bytes)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setUploadStatus('failed');
+      setUploadError('Dung lượng ảnh vượt quá 5 MB (5 MiB). Vui lòng chọn ảnh nhỏ hơn.');
+      return;
+    }
+
+    // 3. Tạo preview thực tế (object URL)
+    cleanupPreview();
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    setIsObjectUrl(true);
+    setSelectedFile(file);
+
+    // 4. Tiến hành upload trực tiếp
+    setUploadStatus('uploading');
+    const uploader = onUploadImage || uploadMenuItemImage;
+
+    try {
+      const res = await uploader(file);
+      setImageUrl(res.url);
+      setUploadStatus('uploaded');
+    } catch (err: unknown) {
+      setUploadStatus('failed');
+      const msg =
+        err instanceof MenuApiError
+          ? err.error?.message || 'Không thể tải ảnh lên máy chủ (Storage).'
+          : err instanceof Error
+          ? err.message
+          : 'Lỗi kết nối khi tải ảnh lên máy chủ.';
+      setUploadError(msg);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleProcessFile(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveImage = () => {
+    cleanupPreview();
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setIsObjectUrl(false);
+    setImageUrl('');
+    setUploadStatus('idle');
+    setUploadError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRetryUpload = () => {
+    if (selectedFile) {
+      handleProcessFile(selectedFile);
+    } else if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleProcessFile(file);
+    }
+  };
+
   // Kiểm tra tính hợp lệ trước khi gửi
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
@@ -205,19 +346,12 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
     }
 
     const trimmedImg = imageUrl.trim();
-    if (trimmedImg) {
-      if (trimmedImg.length > 2048) {
-        errs.imageUrl = 'URL ảnh không được vượt quá 2048 ký tự.';
-      } else {
-        try {
-          const parsedUrl = new URL(trimmedImg);
-          if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'images.unsplash.com') {
-            errs.imageUrl = 'URL ảnh phải sử dụng giao thức HTTPS từ images.unsplash.com.';
-          }
-        } catch {
-          errs.imageUrl = 'Đường dẫn ảnh không hợp lệ.';
-        }
-      }
+    if (trimmedImg && trimmedImg.length > 2048) {
+      errs.imageUrl = 'Đường dẫn ảnh không được vượt quá 2048 ký tự.';
+    }
+
+    if (uploadStatus === 'uploading' || uploadStatus === 'validating') {
+      errs.upload = 'Ảnh đang được tải lên. Vui lòng đợi hoàn tất trước khi lưu.';
     }
 
     // Kiểm tra tên các tùy chọn nếu có
@@ -481,51 +615,158 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
           />
         </div>
 
-        {/* 4. URL Ảnh món ăn & Live Preview */}
+        {/* 4. Hình ảnh món ăn: Khung tải ảnh trực tiếp từ thiết bị (HF01) */}
         <div className="space-y-1.5">
-          <label htmlFor="item-image-url" className="text-xs font-semibold text-[#1D2522]">
-            URL hình ảnh món ăn
+          <label htmlFor="item-image-file-input" className="text-xs font-semibold text-[#1D2522] block">
+            Hình ảnh món ăn
           </label>
-          <div className="flex gap-3 items-center">
-            {/* Khung preview ảnh nhỏ */}
-            <div className="w-14 h-14 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] overflow-hidden flex items-center justify-center flex-shrink-0 relative">
-              {imageUrl ? (
-                <Image
-                  src={imageUrl}
-                  alt="Xem trước ảnh món"
-                  fill
-                  className="object-cover"
-                  unoptimized
-                />
-              ) : (
-                <Coffee className="w-5 h-5 text-[#35977D]" aria-hidden="true" />
-              )}
-            </div>
 
-            <div className="flex-1 space-y-1">
-              <input
-                id="item-image-url"
-                type="url"
-                disabled={isSubmitting}
-                value={imageUrl}
-                onChange={(e) => {
-                  setImageUrl(e.target.value);
-                  if (errors.imageUrl) setErrors((prev) => ({ ...prev, imageUrl: '' }));
-                }}
-                placeholder="https://images.unsplash.com/... (ảnh HTTPS Unsplash)"
-                className={`w-full h-10 px-3 rounded-xl border text-xs text-[#1D2522] placeholder-[#727B77] bg-[#F7F8F7] focus:bg-white focus:outline-none transition-colors ${
-                  errors.imageUrl
-                    ? 'border-[#FDA29B] focus:ring-2 focus:ring-[#FDA29B]'
-                    : 'border-[#E9ECEA] focus:ring-2 focus:ring-[#35977D]'
-                }`}
-              />
-              {errors.imageUrl && <p className="text-[11px] text-[#B42318]">{errors.imageUrl}</p>}
-              <p className="text-[10px] text-[#727B77] flex items-center gap-1">
-                <Info className="w-3 h-3 text-[#35977D] flex-shrink-0" aria-hidden="true" />
-                <span>Chỉ hỗ trợ URL HTTPS từ images.unsplash.com (tối đa 2048 ký tự).</span>
-              </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            disabled={isSubmitting || uploadStatus === 'uploading'}
+            onChange={handleFileChange}
+            className="hidden"
+            id="item-image-file-input"
+            aria-label="Tải ảnh món ăn từ thiết bị"
+          />
+
+          {!previewUrl ? (
+            /* Khung upload ban đầu: icon + CTA + mô tả */
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => {
+                if (!isSubmitting && uploadStatus !== 'uploading') {
+                  fileInputRef.current?.click();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              className={`w-full p-5 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+                isDragging
+                  ? 'border-[#35977D] bg-[#E8F4F0]'
+                  : 'border-[#D0D5DD] bg-[#F7F8F7] hover:border-[#35977D] hover:bg-[#F2F8F5]'
+              }`}
+            >
+              <div className="w-10 h-10 rounded-full bg-white border border-[#E9ECEA] flex items-center justify-center mb-2 shadow-2xs">
+                <Upload className="w-5 h-5 text-[#35977D]" aria-hidden="true" />
+              </div>
+              <span className="text-xs font-bold text-[#1D2522]">
+                Chọn ảnh từ thiết bị
+              </span>
+              <span className="text-[11px] text-[#727B77] mt-0.5">
+                Kéo thả hoặc bấm để duyệt file
+              </span>
+              <span className="text-[10px] text-[#A0A8A5] mt-1.5 font-medium">
+                JPG, PNG, WebP · Tối đa 5 MB
+              </span>
             </div>
-          </div>
+          ) : (
+            /* Khung preview sau khi chọn hoặc khi sửa món đã có ảnh */
+            <div className="p-3 rounded-2xl bg-[#F7F8F7] border border-[#E9ECEA] space-y-2.5">
+              <div className="flex items-center gap-3">
+                {/* Ảnh preview 1:1 tỉ lệ vuông bo góc */}
+                <div className="w-16 h-16 rounded-xl bg-white border border-[#E9ECEA] overflow-hidden flex-shrink-0 relative">
+                  <Image
+                    src={previewUrl}
+                    alt={selectedFile ? selectedFile.name : (name || 'Ảnh món ăn')}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                  {uploadStatus === 'uploading' && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <Loader2 className="w-5 h-5 text-white animate-spin" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Thông tin ảnh & Các nút hành động */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-[#1D2522] truncate">
+                    {selectedFile ? selectedFile.name : 'Ảnh món hiện tại'}
+                  </p>
+                  <p className="text-[11px] text-[#727B77]">
+                    {selectedFile ? formatFileSize(selectedFile.size) : 'Đã lưu trên hệ thống'}
+                  </p>
+
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <button
+                      type="button"
+                      disabled={isSubmitting || uploadStatus === 'uploading'}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs font-semibold text-[#1D725E] hover:text-[#165B4B] disabled:opacity-50 transition-colors"
+                    >
+                      Thay ảnh
+                    </button>
+                    <span className="text-[#D0D5DD] text-xs">·</span>
+                    <button
+                      type="button"
+                      disabled={isSubmitting || uploadStatus === 'uploading'}
+                      onClick={handleRemoveImage}
+                      className="text-xs font-semibold text-[#B42318] hover:text-[#912018] disabled:opacity-50 transition-colors"
+                    >
+                      Bỏ ảnh
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status badge */}
+                <div className="flex-shrink-0">
+                  {uploadStatus === 'uploading' && (
+                    <span className="text-[11px] text-[#1D725E] font-medium flex items-center gap-1 bg-[#E8F4F0] px-2 py-0.5 rounded-full border border-[#C6E7DC]">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>Đang tải...</span>
+                    </span>
+                  )}
+                  {uploadStatus === 'uploaded' && (
+                    <span className="text-[11px] text-[#1D725E] font-medium flex items-center gap-1 bg-[#E8F4F0] px-2 py-0.5 rounded-full border border-[#C6E7DC]">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Đã tải lên</span>
+                    </span>
+                  )}
+                  {uploadStatus === 'failed' && (
+                    <button
+                      type="button"
+                      onClick={handleRetryUpload}
+                      className="text-[11px] text-[#B42318] font-medium flex items-center gap-1 bg-[#FEF3F2] px-2 py-0.5 rounded-full border border-[#FECDCA] hover:bg-[#FEE4E2] transition-colors"
+                      title="Bấm để thử lại"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Thử lại</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {uploadError && (
+            <div className="p-2.5 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-center gap-2 text-xs text-[#912018]">
+              <AlertCircle className="w-4 h-4 text-[#B42318] flex-shrink-0" aria-hidden="true" />
+              <span>{uploadError}</span>
+            </div>
+          )}
+
+          {errors.upload && (
+            <div className="p-2.5 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-center gap-2 text-xs text-[#912018]">
+              <AlertCircle className="w-4 h-4 text-[#B42318] flex-shrink-0" aria-hidden="true" />
+              <span>{errors.upload}</span>
+            </div>
+          )}
+
+          <p className="text-[10px] text-[#727B77]">
+            Hỗ trợ JPG, PNG, WebP · Tối đa 5 MB
+          </p>
         </div>
 
         {/* 5. Hai công tắc Trạng thái: Còn hàng & Đang hiển thị */}
@@ -700,13 +941,18 @@ export const OwnerMenuItemForm: React.FC<OwnerMenuItemFormProps> = ({
         )}
         <button
           type="submit"
-          disabled={isSubmitting}
-          className="h-10 px-5 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+          disabled={isSubmitting || uploadStatus === 'uploading' || uploadStatus === 'validating'}
+          className="h-10 px-5 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (
             <>
               <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
               <span>Đang lưu...</span>
+            </>
+          ) : uploadStatus === 'uploading' ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+              <span>Đang tải ảnh...</span>
             </>
           ) : (
             <>

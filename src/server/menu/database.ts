@@ -7,7 +7,7 @@ import { getServerEnv } from "@/lib/env/server";
 import { ApiFault, apiFailure } from "@/server/security/api";
 
 export class MenuBusinessFault extends ApiFault { constructor() { super("VALIDATION_ERROR"); } }
-const errors = new Set<ApiErrorCode>(["FORBIDDEN", "UNAUTHORIZED", "INVALID_QR", "RESOURCE_NOT_FOUND", "INVALID_STATE_TRANSITION", "DUPLICATE_REQUEST_CONFLICT", "RATE_LIMITED", "VALIDATION_ERROR"]);
+const errors = new Set<ApiErrorCode>(["FORBIDDEN", "UNAUTHORIZED", "INVALID_QR", "RESOURCE_NOT_FOUND", "INVALID_STATE_TRANSITION", "DUPLICATE_REQUEST_CONFLICT", "RATE_LIMITED", "VALIDATION_ERROR", "CATEGORY_NOT_EMPTY", "TABLE_IN_USE", "ITEM_UNAVAILABLE"]);
 export async function executeMenu<T>(action: string, input: Record<string, unknown>): Promise<T> {
   try {
     const env = getClientEnv();
@@ -19,7 +19,9 @@ export async function executeMenu<T>(action: string, input: Record<string, unkno
     if (error || !data || typeof data !== "object") throw new ApiFault("INTERNAL_ERROR");
     if (data.error) {
       if (data.error === "VALIDATION_ERROR") throw new MenuBusinessFault();
-      throw new ApiFault(errors.has(data.error) ? data.error : "INTERNAL_ERROR", data.error === "RATE_LIMITED" ? { retryAfterSeconds: Math.max(1, Math.min(60, Number(data.retryAfterSeconds) || 60)) } : undefined);
+      throw new ApiFault(errors.has(data.error) ? data.error : "INTERNAL_ERROR",
+        data.error === "RATE_LIMITED" ? { retryAfterSeconds: Math.max(1, Math.min(60, Number(data.retryAfterSeconds) || 60)) }
+          : data.error === "CATEGORY_NOT_EMPTY" ? { count: Math.max(0, Number(data.details?.count) || 0) } : undefined);
     }
     return data.data as T;
   } catch (error) {

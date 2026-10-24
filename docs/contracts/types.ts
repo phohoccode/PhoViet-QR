@@ -201,6 +201,8 @@ export interface OwnerQueueView {
 export type ApiErrorCode =
   | 'INVALID_QR' | 'SESSION_REQUIRED' | 'SESSION_EXPIRED' | 'SESSION_CHECKOUT_PENDING' | 'INVALID_SESSION_CODE'
   | 'OUT_OF_STOCK' | 'PRICE_CHANGED' | 'ORDER_NOT_FOUND'
+  | 'TABLE_IN_USE' | 'CATEGORY_NOT_EMPTY' | 'ITEM_UNAVAILABLE'
+  | 'FILE_TOO_LARGE' | 'UNSUPPORTED_MEDIA_TYPE' | 'UPLOAD_FAILED'
   | 'PAYMENT_PENDING' | 'PAYMENT_MISMATCH' | 'PAYMENT_EXPIRED'
   | 'PAYMENT_PROVIDER_UNAVAILABLE' | 'PAYMENT_REVIEW_REQUIRED'
   | 'INVALID_PICKUP_CODE' | 'PICKUP_CREDENTIAL_UNAVAILABLE' | 'PICKUP_NOT_ALLOWED' | 'ORDER_ALREADY_COMPLETED'
@@ -214,6 +216,7 @@ export interface ApiErrorDetails {
   currentPrices?: { menuItemId: Id; priceVnd: MoneyVnd }[];
   retryAfterSeconds?: number;
   field?: string;
+  count?: number;
 }
 export interface ApiError {
   code: ApiErrorCode;
@@ -325,7 +328,7 @@ export interface SettlementView {
 }
 export interface SettleSessionView { detail: TableSessionDetail; settlement: SettlementView | null }
 export interface SessionSettlementResult extends SettleSessionView { bill: TableBillView }
-export interface OwnerMenuItem extends MenuItem { active: boolean }
+export interface OwnerMenuItem extends MenuItem { active: boolean; imagePath?: string | null; archivedAt?: IsoTimestamp | null }
 export interface OwnerMenuView {
   categories: (MenuCategory & { active: boolean })[];
   items: OwnerMenuItem[];
@@ -403,7 +406,7 @@ export interface WebhookReceipt {
 }
 
 // P2-C02 additive category CRUD contract; existing R03/R14/R15/R16 DTOs unchanged.
-export interface OwnerMenuCategory extends MenuCategory { active: boolean; updatedAt: IsoTimestamp }
+export interface OwnerMenuCategory extends MenuCategory { active: boolean; updatedAt: IsoTimestamp; archivedAt?: IsoTimestamp | null }
 export interface CreateMenuCategoryInput extends RequestCommand { name: string; sortOrder: number; active: boolean }
 export type PatchMenuCategoryInput = RequestCommand & Partial<Pick<CreateMenuCategoryInput, 'name' | 'sortOrder' | 'active'>> & { expectedUpdatedAt: IsoTimestamp };
 export type PublicMenuResponse = MenuV1View;
