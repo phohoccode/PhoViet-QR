@@ -1,0 +1,46 @@
+{
+  "validatedOn": "2026-10-24",
+  "database": "loopback Supabase/PostgreSQL only",
+  "integration": {
+    "passed": 140,
+    "files": 19
+  },
+  "billingIntegration": {
+    "passed": 13
+  },
+  "migration": {
+    "passed": 1,
+    "freshChain": true,
+    "atomicRollback": true,
+    "driftGuards": true,
+    "crlf": true,
+    "rlsAndAcl": true
+  },
+  "unit": {
+    "passed": 131
+  },
+  "auth": {
+    "passed": 46
+  },
+  "databaseFoundation": {
+    "passed": 9
+  },
+  "uiContract": {
+    "passed": 240,
+    "browserE2e": "NOT_RUN"
+  },
+  "billingHttp": {
+    "passed": 45,
+    "source": "main workspace"
+  },
+  "takeawayHttp": {
+    "status": "PASS",
+    "source": "committed UI plus Phase5 backend isolated checkout"
+  },
+  "mainTypecheck": "PASS",
+  "mainProductionBuild": "PASS",
+  "backendIsolationLint": "PASS",
+  "productionMutations": "NOT_PERFORMED",
+  "providerNetwork": "NOT_CALLED",
+  "mainLint": "PASS"
+}

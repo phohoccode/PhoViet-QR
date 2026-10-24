@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Info,
+  Receipt,
 } from 'lucide-react';
 import type { OrderDetail, OrderStatus } from '../../../../docs/contracts/types';
 import { ORDER_STATUS_LABELS } from '../../../../docs/contracts/types';
@@ -777,16 +778,42 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
         {/* ===================================================================
             4. Nút Hành Động Đáy (Sticky Footer CTAs)
            =================================================================== */}
-        <div className="p-4 bg-white border-t border-[#E9ECEA] space-y-2 sticky bottom-0">
-          <button
-            type="button"
-            onClick={handleOrderMore}
-            className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
-            aria-label="Gọi thêm món vào bàn này"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>Gọi thêm món khác</span>
-          </button>
+        <div className="p-4 bg-white border-t border-[#E9ECEA] space-y-2 sticky bottom-0 z-20 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+          {order.type === 'dine_in' && qrCode ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleOrderMore}
+                className="h-12 min-h-[48px] rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+                aria-label="Gọi thêm món vào bàn này"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Gọi thêm món</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  router.push(`/q/${encodeURIComponent(qrCode)}?view=bill`);
+                }}
+                className="h-12 min-h-[48px] rounded-xl text-xs sm:text-sm font-bold bg-[#E8F4F0] hover:bg-[#D3EDE4] active:scale-[0.99] text-[#1D725E] border border-[#C6E7DC] flex items-center justify-center gap-2 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+                aria-label="Xem hóa đơn bàn"
+              >
+                <Receipt className="w-4 h-4" />
+                <span>Xem hóa đơn bàn</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleOrderMore}
+              className="w-full h-12 min-h-[48px] rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+              aria-label="Gọi thêm món vào bàn này"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Gọi thêm món khác</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

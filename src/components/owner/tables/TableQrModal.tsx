@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from "react";
 import {
   X,
   Download,
@@ -11,17 +11,17 @@ import {
   Loader2,
   ChevronDown,
   QrCode,
-} from 'lucide-react';
-import type { OwnerTable, OwnerQrCode } from '@/types/contracts/table-qr';
-import { rotateOwnerQrCode, MenuApiError } from '@/features/owner/api-client';
-import { QrCodeView } from '../qr/QrCodeView';
-import { PrintQrVoucher } from '../qr/PrintQrVoucher';
+} from "lucide-react";
+import type { OwnerTable, OwnerQrCode } from "@/types/contracts/table-qr";
+import { rotateOwnerQrCode, MenuApiError } from "@/features/owner/api-client";
+import { QrCodeView } from "../qr/QrCodeView";
+import { PrintQrVoucher } from "../qr/PrintQrVoucher";
 import {
   generateQrMatrix,
   matrixToSvg,
   downloadSvgString,
   downloadPngFromMatrix,
-} from '@/lib/qr/qr-code';
+} from "@/lib/qr/qr-code";
 
 export interface TableQrModalProps {
   table: OwnerTable;
@@ -44,14 +44,15 @@ export interface TableQrModalProps {
 export const TableQrModal: React.FC<TableQrModalProps> = ({
   table,
   qrCode: initialQrCode,
-  storeName = 'PHỞ VIỆT QR',
+  storeName = "PHỞ VIỆT QR",
   isOpen,
   onClose,
   onQrRotated,
 }) => {
   const [prevTableId, setPrevTableId] = useState<string>(table.id);
   const [overrideQr, setOverrideQr] = useState<OwnerQrCode | null>(null);
-  const currentQr: OwnerQrCode | null = overrideQr ?? initialQrCode ?? table.qr ?? null;
+  const currentQr: OwnerQrCode | null =
+    overrideQr ?? initialQrCode ?? table.qr ?? null;
 
   const [copiedLink, setCopiedLink] = useState(false);
   const [isRotating, setIsRotating] = useState(false);
@@ -90,10 +91,13 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
 
   // UI-03: Chỉ coi là URL hợp lệ khi có publicUrl thật từ server và QR đang active, chưa thu hồi
   const isValidPublicUrl = Boolean(
-    currentQr && currentQr.publicUrl && currentQr.active && !currentQr.retiredAt
+    currentQr &&
+    currentQr.publicUrl &&
+    currentQr.active &&
+    !currentQr.retiredAt,
   );
-  const fullPublicUrl = isValidPublicUrl ? currentQr!.publicUrl : '';
-  const filenameBase = `QR_${table.label.replace(/\s+/g, '_')}`;
+  const fullPublicUrl = isValidPublicUrl ? currentQr!.publicUrl : "";
+  const filenameBase = `QR_${table.label.replace(/\s+/g, "_")}`;
 
   // Kiểm tra phiên hoạt động
   const hasActiveSession = table.session !== null;
@@ -118,8 +122,8 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
       const svg = matrixToSvg(matrix, {
         margin: 4,
         size: 512,
-        fgColor: '#1D2522',
-        bgColor: '#FFFFFF',
+        fgColor: "#1D2522",
+        bgColor: "#FFFFFF",
       });
       downloadSvgString(svg, filenameBase);
     } catch {
@@ -151,13 +155,13 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
   // Xử lý Đổi mã QR (Rotate) qua POST /api/owner/qr-codes/:id/rotate
   const handleRotateQr = async () => {
     if (!currentQr?.id) {
-      setRotateError('Bàn chưa có mã QR active để thực hiện đổi mã.');
+      setRotateError("Bàn chưa có mã QR active để thực hiện đổi mã.");
       return;
     }
 
     if (hasActiveSession) {
       setRotateError(
-        'Không thể đổi mã QR khi bàn đang có phiên hoạt động hoặc chờ thanh toán. Vui lòng đóng hoặc kết thúc phiên bàn trước.'
+        "Không thể đổi mã QR khi bàn đang có phiên hoạt động hoặc chờ thanh toán. Vui lòng đóng hoặc kết thúc phiên bàn trước.",
       );
       setShowRotateConfirm(false);
       return;
@@ -189,32 +193,41 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
         const field = err.error.details?.field;
         const code = err.error.code;
 
-        if (code === 'INVALID_STATE_TRANSITION' && field === 'activeSession') {
+        if (code === "INVALID_STATE_TRANSITION" && field === "activeSession") {
           rotateRequestIdRef.current = null;
           setRotateError(
-            'Đổi mã QR bị chặn vì bàn đang có phiên hoạt động hoặc chờ thanh toán.'
+            "Đổi mã QR bị chặn vì bàn đang có phiên hoạt động hoặc chờ thanh toán.",
           );
-        } else if (code === 'INVALID_STATE_TRANSITION' && field === 'expectedUpdatedAt') {
+        } else if (
+          code === "INVALID_STATE_TRANSITION" &&
+          field === "expectedUpdatedAt"
+        ) {
           rotateRequestIdRef.current = null;
           setRotateError(
-            'Mã QR đã được cập nhật bởi một thao tác khác. Vui lòng tải lại trang.'
+            "Mã QR đã được cập nhật bởi một thao tác khác. Vui lòng tải lại trang.",
           );
-        } else if (code === 'INVALID_STATE_TRANSITION' && (field === 'rotation' || field === 'retiredQr')) {
+        } else if (
+          code === "INVALID_STATE_TRANSITION" &&
+          (field === "rotation" || field === "retiredQr")
+        ) {
           rotateRequestIdRef.current = null;
           setRotateError(
-            'Mã QR hiện tại không hợp lệ hoặc đã ngừng hoạt động để đổi mã.'
+            "Mã QR hiện tại không hợp lệ hoặc đã ngừng hoạt động để đổi mã.",
           );
         } else {
-          setRotateError(err.error.message || 'Không thể đổi mã QR của bàn này.');
+          setRotateError(
+            err.error.message || "Không thể đổi mã QR của bàn này.",
+          );
         }
       } else {
-        setRotateError('Lỗi mạng khi yêu cầu đổi mã QR bàn. Bấm thử lại để gửi lại yêu cầu.');
+        setRotateError(
+          "Lỗi mạng khi yêu cầu đổi mã QR bàn. Bấm thử lại để gửi lại yêu cầu.",
+        );
       }
     } finally {
       setIsRotating(false);
     }
   };
-
 
   return (
     <>
@@ -232,7 +245,9 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
       {/* DIALOG CHÍNH TRÊN MÀN HÌNH */}
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs print:hidden ${
-          isClosing ? 'animate-dialog-backdrop-out' : 'animate-dialog-backdrop-in'
+          isClosing
+            ? "animate-dialog-backdrop-out"
+            : "animate-dialog-backdrop-in"
         }`}
         role="dialog"
         aria-modal="true"
@@ -241,7 +256,7 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
       >
         <div
           className={`w-full max-w-md bg-white rounded-3xl border border-[#E9ECEA] shadow-2xl overflow-hidden flex flex-col max-h-[92vh] ${
-            isClosing ? 'animate-dialog-card-out' : 'animate-dialog-card-in'
+            isClosing ? "animate-dialog-card-out" : "animate-dialog-card-in"
           }`}
           onClick={(e) => e.stopPropagation()}
         >
@@ -253,13 +268,15 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                   {storeName}
                 </span>
                 <span
-                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                  className={`text-[10px] font-semibold whitespace-nowrap px-2 py-0.5 rounded-full ${
                     currentQr?.active !== false
-                      ? 'bg-[#E8F4F0] text-[#1D725E]'
-                      : 'bg-[#FEF3F2] text-[#B42318]'
+                      ? "bg-[#E8F4F0] text-[#1D725E]"
+                      : "bg-[#FEF3F2] text-[#B42318]"
                   }`}
                 >
-                  {currentQr?.active !== false ? 'QR Đang hoạt động' : 'QR Đã khóa'}
+                  {currentQr?.active !== false
+                    ? "QR Đang hoạt động"
+                    : "QR Đã khóa"}
                 </span>
               </div>
               <h3
@@ -286,11 +303,15 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                 role="alert"
                 className="p-3 bg-[#E8F4F0] border border-[#C6E7DC] rounded-2xl text-xs text-[#165B4B] flex items-start gap-2 animate-in fade-in"
               >
-                <RefreshCw className="w-4 h-4 shrink-0 text-[#1D725E] mt-0.5" aria-hidden="true" />
+                <RefreshCw
+                  className="w-4 h-4 shrink-0 text-[#1D725E] mt-0.5"
+                  aria-hidden="true"
+                />
                 <div>
                   <p className="font-bold">Đã đổi mã QR mới thành công!</p>
                   <p className="text-[11px] text-[#165B4B]/80 mt-0.5">
-                    Mã QR cũ đã mất hiệu lực. Vui lòng in và dán lại mã mới lên bàn cho khách quét.
+                    Mã QR cũ đã mất hiệu lực. Vui lòng in và dán lại mã mới lên
+                    bàn cho khách quét.
                   </p>
                 </div>
               </div>
@@ -302,7 +323,10 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                 role="alert"
                 className="p-3 bg-[#FEF3F2] border border-[#FECDCA] rounded-2xl text-xs text-[#912018] flex items-start gap-2"
               >
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <AlertTriangle
+                  className="w-4 h-4 shrink-0 mt-0.5"
+                  aria-hidden="true"
+                />
                 <span>{rotateError}</span>
               </div>
             )}
@@ -310,12 +334,16 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
             {/* QR Code trung tâm */}
             {!isValidPublicUrl ? (
               <div className="flex flex-col items-center justify-center p-8 bg-[#F7F8F7] rounded-2xl border border-dashed border-[#E9ECEA] text-center space-y-2">
-                <QrCode className="w-12 h-12 text-[#A0AAA5]" aria-hidden="true" />
+                <QrCode
+                  className="w-12 h-12 text-[#A0AAA5]"
+                  aria-hidden="true"
+                />
                 <p className="text-xs font-bold text-[#1D2522]">
                   Bàn chưa có mã QR công khai từ máy chủ
                 </p>
                 <p className="text-[11px] text-[#727B77]">
-                  Mã QR có thể đã bị khóa hoặc thu hồi. Vui lòng kiểm tra lại cấu hình bàn.
+                  Mã QR có thể đã bị khóa hoặc thu hồi. Vui lòng kiểm tra lại
+                  cấu hình bàn.
                 </p>
               </div>
             ) : (
@@ -341,7 +369,10 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                   >
                     {copiedLink ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-[#1D725E]" aria-hidden="true" />
+                        <Check
+                          className="w-3.5 h-3.5 text-[#1D725E]"
+                          aria-hidden="true"
+                        />
                         <span className="text-[11px]">Đã chép</span>
                       </>
                     ) : (
@@ -357,10 +388,14 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
 
             {/* Cảnh báo bảo mật phiên bàn */}
             <div className="p-3 bg-[#FAFBFB] border border-[#E9ECEA] rounded-xl text-xs text-[#55605C] flex items-start gap-2.5">
-              <ShieldAlert className="w-4 h-4 text-[#727B77] shrink-0 mt-0.5" aria-hidden="true" />
+              <ShieldAlert
+                className="w-4 h-4 text-[#727B77] shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
               <p className="leading-relaxed">
-                Mã QR dán tại bàn chỉ dẫn đến trang gọi món công khai. Để tránh gọi nhầm bàn,
-                khách cần nhập <strong>mã phiên bàn</strong> do bạn cung cấp khi bắt đầu.
+                Mã QR dán tại bàn chỉ dẫn đến trang gọi món công khai. Để tránh
+                gọi nhầm bàn, khách cần nhập <strong>mã phiên bàn</strong> do
+                bạn cung cấp khi bắt đầu.
               </p>
             </div>
 
@@ -372,7 +407,10 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                 onClick={handleDownloadSvg}
                 className="h-11 px-3 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-[#1D2522] text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs hover:border-[#35977D] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Download className="w-3.5 h-3.5 text-[#35977D]" aria-hidden="true" />
+                <Download
+                  className="w-3.5 h-3.5 text-[#35977D]"
+                  aria-hidden="true"
+                />
                 <span>Tải SVG</span>
               </button>
               <button
@@ -381,7 +419,10 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                 onClick={handleDownloadPng}
                 className="h-11 px-3 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-[#1D2522] text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs hover:border-[#35977D] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Download className="w-3.5 h-3.5 text-[#35977D]" aria-hidden="true" />
+                <Download
+                  className="w-3.5 h-3.5 text-[#35977D]"
+                  aria-hidden="true"
+                />
                 <span>Tải PNG</span>
               </button>
               <button
@@ -391,7 +432,7 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                 className="h-11 px-3 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Printer className="w-4 h-4" aria-hidden="true" />
-                <span>{isPrinting ? 'Đang mở in...' : 'In phiếu QR'}</span>
+                <span>{isPrinting ? "Đang mở in..." : "In phiếu QR"}</span>
               </button>
             </div>
 
@@ -405,7 +446,7 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                 <span>Tùy chọn nâng cao (Đổi mã QR)</span>
                 <ChevronDown
                   className={`w-4 h-4 transition-transform duration-200 ${
-                    showAdvanced ? 'rotate-180' : ''
+                    showAdvanced ? "rotate-180" : ""
                   }`}
                   aria-hidden="true"
                 />
@@ -414,18 +455,25 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
               {showAdvanced && (
                 <div className="mt-2 p-3 bg-[#FEF3F2]/50 border border-[#FECDCA] rounded-2xl space-y-3">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-[#B42318] shrink-0 mt-0.5" aria-hidden="true" />
+                    <AlertTriangle
+                      className="w-4 h-4 text-[#B42318] shrink-0 mt-0.5"
+                      aria-hidden="true"
+                    />
                     <div>
-                      <h5 className="text-xs font-bold text-[#912018]">Đổi mã QR cho bàn</h5>
+                      <h5 className="text-xs font-bold text-[#912018]">
+                        Đổi mã QR cho bàn
+                      </h5>
                       <p className="text-[11px] text-[#B42318] mt-0.5">
-                        Khi đổi mã, mã QR cũ đã in sẽ lập tức vô hiệu hóa. Bạn phải in và dán lại mã mới.
+                        Khi đổi mã, mã QR cũ đã in sẽ lập tức vô hiệu hóa. Bạn
+                        phải in và dán lại mã mới.
                       </p>
                     </div>
                   </div>
 
                   {hasActiveSession ? (
                     <div className="p-2 bg-white rounded-xl border border-[#FECDCA] text-[11px] text-[#B42318] font-medium">
-                      Bàn đang có phiên hoạt động hoặc chờ thanh toán. Đổi mã bị khóa để tránh gián đoạn khách đang dùng bữa.
+                      Bàn đang có phiên hoạt động hoặc chờ thanh toán. Đổi mã bị
+                      khóa để tránh gián đoạn khách đang dùng bữa.
                     </div>
                   ) : (
                     <>
@@ -435,13 +483,17 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                           onClick={() => setShowRotateConfirm(true)}
                           className="w-full h-9 px-3 rounded-xl border border-[#FECDCA] bg-white hover:bg-[#FEF3F2] text-[#B42318] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
                         >
-                          <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />
+                          <RefreshCw
+                            className="w-3.5 h-3.5"
+                            aria-hidden="true"
+                          />
                           <span>Yêu cầu đổi mã QR</span>
                         </button>
                       ) : (
                         <div className="p-3 bg-white rounded-xl border border-[#FDA29B] space-y-2.5 animate-in fade-in">
                           <p className="text-xs font-bold text-[#912018]">
-                            Xác nhận: Mã QR cũ sẽ không còn hoạt động. Bạn chắc chắn muốn đổi?
+                            Xác nhận: Mã QR cũ sẽ không còn hoạt động. Bạn chắc
+                            chắn muốn đổi?
                           </p>
                           <div className="flex items-center gap-2">
                             <button
@@ -460,7 +512,10 @@ export const TableQrModal: React.FC<TableQrModalProps> = ({
                             >
                               {isRotating ? (
                                 <>
-                                  <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+                                  <Loader2
+                                    className="w-3 h-3 animate-spin"
+                                    aria-hidden="true"
+                                  />
                                   <span>Đang đổi...</span>
                                 </>
                               ) : (

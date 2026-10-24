@@ -133,4 +133,6 @@ API đọc payment pending thường trả **200 PaymentViewState**; PAYMENT_PEN
 
 ## P2-HF01 PIN generation amendment
 
+P5-C01 implementation: begin creates an immutable `session_checkout_snapshots` record, not a pending payment. Only `confirm_received` creates a successful `session_settlements` ledger row. No failed financial record is invented for a cancelled checkout; all begin/cancel/confirm actions have append-only audit. See [P5_SESSION_BILLING.md](P5_SESSION_BILLING.md). Financial version excludes fulfillment transitions; final settlement also checks the exact prepared financial snapshot and all noncancelled orders completed. Zero-VND sessions retain Q6 behavior.
+
 While session.status=open, explicit owner conversion/rotation atomically changes PIN generation and session.version without a status transition; new PIN differs from prior PIN. Existing guest grants/orders persist. Fresh PIN verify is denied during checkout_pending; existing grants still allow reads, with dine-in writes denied as before. Closed sessions cannot reveal/rotate/verify and cannot be reopened; new session receives independently generated PIN/ciphertext. Replay of an older generation is rejected rather than exposing an obsolete PIN.

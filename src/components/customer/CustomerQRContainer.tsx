@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChefHat, ChevronRight, CheckCircle2, Bell } from 'lucide-react';
+import { ChefHat, ChevronRight, CheckCircle2, Bell, AlertCircle } from 'lucide-react';
 import type { QRResolution, MenuCategory, MenuItem, OrderDetail } from '../../../docs/contracts/types';
 import { CustomerOrderModeHeader } from './CustomerOrderModeHeader';
 import { TableVerificationCard } from './TableVerificationCard';
@@ -12,9 +12,11 @@ import { StickyCartPreview } from './StickyCartPreview';
 import { CustomerSkeleton } from './CustomerSkeleton';
 import { ItemDetailSheet, type SelectedItemPayload } from './ItemDetailSheet';
 import { usePresentationCart, CartSheet } from './cart';
+import { TableBillSheet, useCustomerTableBill } from './bill';
 import {
   getActiveOrderSummary,
   saveActiveOrderSummary,
+  clearActiveOrderSummary,
   subscribeActiveOrder,
   isTerminalOrderStatus,
   getOrderStatusBadgeConfig,
@@ -61,6 +63,7 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [isCartSheetOpen, setIsCartSheetOpen] = useState(false);
+  const [isBillSheetOpen, setIsBillSheetOpen] = useState(false);
 
   // Lưu giữ thông tin đơn hàng vừa đặt để khách luôn theo dõi được tiến độ
   const [activeOrder, setActiveOrder] = useState<ActiveOrderSummary | null>(() => {
@@ -92,6 +95,51 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
       : 'Không thể tải thực đơn từ máy chủ của quán.'
     : null;
 
+  const isDineIn = resolution?.type === 'table';
+  const isTableVerified = Boolean(isDineIn && !resolution?.requiresSessionCode);
+
+  const customerBillState = useCustomerTableBill({
+    qrCode,
+    enabled: Boolean(isDineIn && isTableVerified),
+    refetchIntervalMs: 8000,
+  });
+
+  const isSessionClosed = Boolean(
+    isDineIn &&
+    (customerBillState.bill?.session.status === 'closed' ||
+      customerBillState.bill?.session.paymentStatus === 'paid' ||
+      Boolean(customerBillState.bill?.settledAt))
+  );
+
+  const currentSessionId = isDineIn
+    ? (resolution?.session?.id ?? customerBillState.bill?.session.id)
+    : undefined;
+
+  const isOrderFromPastSession = Boolean(
+    isDineIn &&
+      activeOrder && (
+        (activeOrder.sessionId && currentSessionId && activeOrder.sessionId !== currentSessionId) ||
+        (customerBillState.bill &&
+          customerBillState.bill.session.status !== 'closed' &&
+          !customerBillState.bill.orders.some((o) => o.id === activeOrder.id))
+      )
+  );
+
+  const shouldShowActiveOrder = Boolean(
+    activeOrder &&
+    !isSessionClosed &&
+    !isOrderFromPastSession
+  );
+
+  // Khi phiên bàn đã kết thúc (chủ quán chốt tiền/đóng phiên) hoặc bàn đã mở phiên mới:
+  // Dọn dẹp đơn hàng cũ khỏi sessionStorage để không hiển thị đơn của phiên cũ
+  useEffect(() => {
+    if (!isDineIn) return;
+    if ((isSessionClosed || isOrderFromPastSession) && activeOrder) {
+      clearActiveOrderSummary(qrCode);
+    }
+  }, [isDineIn, isSessionClosed, isOrderFromPastSession, activeOrder, qrCode]);
+
   const handleRetryResolve = () => { void cart.refresh(); };
   const handleRetryMenu = () => { void cart.refresh(); };
 
@@ -103,10 +151,12 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
       itemCount: order.itemCount,
       totalVnd: order.totalVnd,
       tableLabel: resolution && resolution.type === 'table' ? resolution.table.label : undefined,
+      sessionId: order.type === 'dine_in' ? order.tableSessionId : undefined,
       updatedAt: new Date().toISOString(),
     };
     setActiveOrder(summary);
     saveActiveOrderSummary(summary, qrCode);
+    void customerBillState.refetch();
   };
 
   // Đồng bộ tức thì khi trạng thái đơn thay đổi từ màn hình khác (như trang theo dõi tiến độ)
@@ -116,6 +166,17 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
     });
 
     return unsubscribe;
+  }, []);
+
+  // Hỗ trợ mở trực tiếp hóa đơn bàn từ query param ?view=bill (ví dụ: chuyển từ màn theo dõi đơn)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('view') === 'bill') {
+        const openBillTimer = window.setTimeout(() => setIsBillSheetOpen(true), 0);
+        return () => window.clearTimeout(openBillTimer);
+      }
+    }
   }, []);
 
   // Tự động kiểm tra trạng thái đơn định kỳ và khi chuyển tab để cập nhật trạng thái mới nhất
@@ -142,6 +203,7 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
               : fresh.table
                 ? fresh.table.label
                 : tableFallback,
+          sessionId: fresh.type === 'dine_in' ? fresh.tableSessionId : activeOrder.sessionId,
           updatedAt: new Date().toISOString(),
         };
         setActiveOrder(summary);
@@ -259,11 +321,12 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
 
   // PHÂN BIỆT RẠCH RÒI 2 CHẾ ĐỘ:
   const isTakeaway = resolution.type === 'takeaway';
-  const isDineIn = resolution.type === 'table';
   const tableLabel = isDineIn ? resolution.table.label : null;
-  const isTableVerified = isDineIn && !resolution.requiresSessionCode;
-  const isTableUnverified = isDineIn && resolution.requiresSessionCode;
-  const isCheckoutPending = isDineIn && resolution.session?.status === 'checkout_pending';
+  const isTableUnverified = Boolean(isDineIn && resolution.requiresSessionCode);
+  const isCheckoutPending =
+    isDineIn &&
+    (resolution.session?.status === 'checkout_pending' ||
+      customerBillState.bill?.session.status === 'checkout_pending');
 
   return (
     <div
@@ -278,14 +341,15 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
           mode={resolution.mode}
           tableLabel={tableLabel}
           cartItemCount={cartState.totalQuantity}
-          activeOrderTicket={activeOrder?.ticketNo}
-          activeOrderStatus={activeOrder?.status}
+          activeOrderTicket={shouldShowActiveOrder ? activeOrder?.ticketNo : undefined}
+          activeOrderStatus={shouldShowActiveOrder ? activeOrder?.status : undefined}
           onTrackOrder={() => {
-            if (activeOrder) {
+            if (shouldShowActiveOrder && activeOrder) {
               router.push(`/order/${encodeURIComponent(activeOrder.id)}?qrCode=${encodeURIComponent(qrCode)}`);
             }
           }}
           onOpenCart={() => setIsCartSheetOpen(true)}
+          onOpenBill={isDineIn && isTableVerified ? () => setIsBillSheetOpen(true) : undefined}
         />
 
         {/* =================================================================
@@ -319,14 +383,51 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         {/* Cảnh báo bàn đang chờ tính tiền nếu có */}
         {isCheckoutPending && (
           <div className="px-4 pt-2">
-            <QRResolutionStateView state="session_locked_or_closed" />
+            <div className="p-3.5 rounded-2xl bg-[#FEF6EE] border border-[#F9DBAF] flex items-start gap-3 shadow-xs animate-dialog-card-in">
+              <AlertCircle className="w-5 h-5 text-[#B54708] flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-[#B54708]">Bàn đang được thanh toán</p>
+                <p className="text-xs text-[#8A4D00] mt-0.5 leading-relaxed">
+                  Bàn đang được thanh toán. Bạn không thể gọi thêm món lúc này.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsBillSheetOpen(true)}
+                  className="mt-2.5 px-3 py-1.5 rounded-lg bg-[#B54708] hover:bg-[#93370D] text-white text-xs font-bold transition-colors shadow-xs"
+                >
+                  Xem hóa đơn bàn →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cảnh báo bàn đã đóng phiên */}
+        {isSessionClosed && (
+          <div className="px-4 pt-2">
+            <div className="p-3.5 rounded-2xl bg-[#F0F2F1] border border-[#E9ECEA] flex items-start gap-3 shadow-xs animate-dialog-card-in">
+              <CheckCircle2 className="w-5 h-5 text-[#1D725E] flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-[#1D2522]">Phiên bàn đã kết thúc</p>
+                <p className="text-xs text-[#55605C] mt-0.5 leading-relaxed">
+                  Hóa đơn đã được thanh toán và phiên bàn đã đóng. Vui lòng liên hệ quán nếu quý khách cần phục vụ thêm.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsBillSheetOpen(true)}
+                  className="mt-2.5 px-3 py-1.5 rounded-lg bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold transition-colors shadow-xs"
+                >
+                  Xem hóa đơn đã thanh toán →
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
         {/* =================================================================
             2c. Thẻ Theo Dõi Đơn Hàng Đang Chuẩn Bị (Active Order Tracking Card)
            ================================================================= */}
-        {activeOrder && (() => {
+        {shouldShowActiveOrder && activeOrder && (() => {
           const statusConfig = getOrderStatusBadgeConfig(activeOrder.status);
           const isDone = statusConfig.isCompleted;
           const isReady = activeOrder.status === 'ready';
@@ -409,25 +510,44 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
             3. Vỏ Khung Xem Trước Thực Đơn (Menu Customer Shell P2-G02)
            ================================================================= */}
         <div className="pt-2">
-          <MenuPreviewSection
-            categories={menuCategories}
-            items={menuItems}
-            isTableVerified={isTableVerified}
-            isTakeaway={isTakeaway}
-            isLoading={isMenuLoading}
-            isMockPreview={false}
-            errorMessage={menuErrorMessage}
-            onRetry={handleRetryMenu}
-            onItemClick={handleOpenItemDetail}
-            onItemAdd={handleOpenItemDetail}
-          />
+          {isSessionClosed ? (
+            <div className="px-4 py-8 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-[#F0F2F1] text-[#727B77] mx-auto flex items-center justify-center">
+                <CheckCircle2 className="w-7 h-7 text-[#1D725E]" />
+              </div>
+              <h3 className="text-base font-bold text-[#1D2522]">Phiên bàn đã kết thúc</h3>
+              <p className="text-xs text-[#727B77] max-w-xs mx-auto leading-relaxed">
+                Hóa đơn đã được thanh toán và phiên bàn đã đóng. Vui lòng liên hệ quán nếu quý khách cần phục vụ thêm!
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsBillSheetOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold transition-colors shadow-xs"
+              >
+                Xem lại hóa đơn bàn
+              </button>
+            </div>
+          ) : (
+            <MenuPreviewSection
+              categories={menuCategories}
+              items={menuItems}
+              isTableVerified={isTableVerified && !isCheckoutPending}
+              isTakeaway={isTakeaway}
+              isLoading={isMenuLoading}
+              isMockPreview={false}
+              errorMessage={menuErrorMessage}
+              onRetry={handleRetryMenu}
+              onItemClick={handleOpenItemDetail}
+              onItemAdd={handleOpenItemDetail}
+            />
+          )}
         </div>
       </div>
 
       {/* =================================================================
           4. Thanh Giỏ Hàng Nổi Đáy (Sticky Cart Preview)
          ================================================================= */}
-      {cartState.totalQuantity > 0 && (
+      {cartState.totalQuantity > 0 && !isSessionClosed && (
         <StickyCartPreview
           itemCount={cartState.totalQuantity}
           totalVnd={cartState.subtotalVnd}
@@ -442,7 +562,7 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         item={selectedItemForDetail}
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
-        canAddToCart={true}
+        canAddToCart={!isCheckoutPending && !isSessionClosed}
         isTableVerified={isTableVerified}
         isTakeaway={isTakeaway}
         onSelectItem={handleSelectItem}
@@ -465,7 +585,10 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         menuItems={menuItems}
         isDemo={false}
         onOrderConfirmed={handleOrderConfirmed}
-        activeOrder={activeOrder}
+        activeOrder={shouldShowActiveOrder ? activeOrder : null}
+        isCheckoutPending={isCheckoutPending}
+        isSessionClosed={isSessionClosed}
+        onOpenBill={() => setIsBillSheetOpen(true)}
         onTrackOrder={(orderId) => {
           router.push(`/order/${encodeURIComponent(orderId)}?qrCode=${encodeURIComponent(qrCode)}`);
         }}
@@ -475,6 +598,24 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
             input.focus();
             input.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
+        }}
+      />
+
+      {/* =================================================================
+          7. Khung Xem Hóa Đơn Bàn & Lượt Gọi Món (P5-G01 / P5-G02)
+         ================================================================= */}
+      <TableBillSheet
+        isOpen={isBillSheetOpen}
+        onClose={() => setIsBillSheetOpen(false)}
+        bill={customerBillState.bill}
+        isLoading={customerBillState.isLoading}
+        isStale={customerBillState.isStale}
+        errorMessage={customerBillState.errorMessage}
+        isBlockedByApi={customerBillState.isBlockedByApi}
+        onRefresh={customerBillState.refetch}
+        tableLabel={tableLabel || 'Bàn'}
+        onOrderMore={() => {
+          setIsBillSheetOpen(false);
         }}
       />
     </div>

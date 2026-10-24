@@ -33,25 +33,26 @@ const states = z.discriminatedUnion("status", [
 const lineView = z.strictObject({ id, menuItemId: id, name: z.string().min(1).max(120), baseUnitPriceVnd: money,
   options: z.array(z.strictObject({ menuOptionId: id, name: z.string().min(1).max(120), priceDeltaVnd: money })).max(50),
   unitPriceVnd: money, quantity: z.number().int().min(1).max(99), lineTotalVnd: money, note: viewNote });
-// Dine-in remains unpaid until the Phase5 settlement implementation extends projection.
+// Dine-in payment derives from the unique successful session settlement.
 const dineInSummaryFields = z.object({
   id, storeId: id, type: z.literal("dine_in"), tableSessionId: id, table: z.strictObject({ id, label: z.string().min(1).max(80) }),
   ticketNo: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER), serviceDate: z.iso.date(), acceptedAt: timestamp,
-  paymentStatus: z.literal("unpaid"), totalVnd: money, itemCount: z.number().int().min(1).max(9900),
+  paymentStatus: z.enum(["unpaid", "paid"]), totalVnd: money, itemCount: z.number().int().min(1).max(9900),
   createdAt: timestamp, updatedAt: timestamp, version: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
 });
 export const dineInOrderSummaryResponse = dineInSummaryFields.and(states);
 export const dineInOrderResponse = dineInSummaryFields.extend({
   lines: z.array(lineView).min(1).max(100), note: viewNote,
   payment: z.strictObject({ kind: z.literal("table_session"), tableSessionId: id, intentId: z.null(), intentStatus: z.null(),
-    status: z.literal("unpaid"), statusLabel: z.literal("Chưa thanh toán"), amountVnd: money, currency: z.literal("VND"), updatedAt: timestamp, reconciliationRequired: z.literal(false) }),
+    status: z.enum(["unpaid", "paid"]), statusLabel: z.enum(["Chưa thanh toán", "Đã thanh toán"]), amountVnd: money, currency: z.literal("VND"), updatedAt: timestamp, reconciliationRequired: z.literal(false) }),
 }).and(states).superRefine((order, ctx) => {
-  if (order.payment.tableSessionId !== order.tableSessionId || order.payment.amountVnd !== order.totalVnd ||
+  if (order.payment.status !== order.paymentStatus || order.payment.statusLabel !== PAYMENT_STATUS_LABELS[order.paymentStatus] ||
+      order.payment.tableSessionId !== order.tableSessionId || order.payment.amountVnd !== order.totalVnd ||
       order.itemCount !== order.lines.reduce((sum, line) => sum + line.quantity, 0) ||
       BigInt(order.totalVnd) !== order.lines.reduce((sum, line) => sum + BigInt(line.lineTotalVnd), BigInt(0)) ||
       order.lines.some(line => BigInt(line.unitPriceVnd) !== BigInt(line.baseUnitPriceVnd) + line.options.reduce((sum, option) => sum + BigInt(option.priceDeltaVnd), BigInt(0)) || BigInt(line.lineTotalVnd) !== BigInt(line.unitPriceVnd) * BigInt(line.quantity)))
     ctx.addIssue({ code: "custom", message: "Inconsistent order snapshot" });
-}) satisfies z.ZodType<OrderDetail>;
+}).transform(order => order as Extract<OrderDetail, { type: "dine_in" }>) satisfies z.ZodType<OrderDetail>;
 
 const takeawaySummary = z.object({
   ...dineInSummaryFields.omit({ type: true, table: true, tableSessionId: true, paymentStatus: true, ticketNo: true, serviceDate: true, acceptedAt: true }).shape,

@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { ApiErrorCode, ApiErrorDetails, ApiResponse } from "@contracts";
 
 const messages: Partial<Record<ApiErrorCode, string>> = {
+  BILL_CHANGED: "Hóa đơn đã thay đổi. Vui lòng tải lại và chốt hóa đơn mới.",
+  SESSION_ORDERS_OUTSTANDING: "Còn đơn chưa phục vụ xong. Hoàn tất giao món trước khi thu tiền.",
   INVALID_PICKUP_CODE: "Mã nhận món không hợp lệ hoặc đã hết hiệu lực.",
   PICKUP_NOT_ALLOWED: "Đơn chưa đủ điều kiện giao món.",
   PICKUP_CREDENTIAL_UNAVAILABLE: "Chưa thể xác minh mã nhận món. Vui lòng thử lại sau.",
@@ -26,6 +28,7 @@ const messages: Partial<Record<ApiErrorCode, string>> = {
   INTERNAL_ERROR: "Dịch vụ tạm thời không khả dụng. Vui lòng thử lại.",
 };
 const statuses: Partial<Record<ApiErrorCode, number>> = {
+  BILL_CHANGED: 409, SESSION_ORDERS_OUTSTANDING: 409,
   INVALID_PICKUP_CODE: 422, PICKUP_NOT_ALLOWED: 409,
   PICKUP_CREDENTIAL_UNAVAILABLE: 503, ORDER_ALREADY_COMPLETED: 409,
   PAYMENT_PROVIDER_UNAVAILABLE: 503, PAYMENT_REVIEW_REQUIRED: 409,

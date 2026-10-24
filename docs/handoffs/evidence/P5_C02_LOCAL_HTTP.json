@@ -1,0 +1,17 @@
+{
+  "scope": "loopback PostgreSQL + Supabase Auth + Next production HTTP",
+  "checks": 48,
+  "status": "PASS",
+  "orders": 4,
+  "successfulSettlements": 1,
+  "totalVnd": 248000,
+  "recovery": [
+    "429 with Retry-After and zero ledger",
+    "500 with full rollback",
+    "same-key retry after recovery",
+    "commit response ignored; GET/refetch and exact retry"
+  ],
+  "realtimePublisher": "absent; GET reconciliation verified",
+  "providerNetwork": "NOT_CALLED",
+  "browserE2E": "NOT_RUN"
+}

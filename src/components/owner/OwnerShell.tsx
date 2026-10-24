@@ -1,20 +1,21 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import type {
   OrderDetail,
   TableSummary,
   MenuItem,
-} from '../../../docs/contracts/types';
-import type { OwnerTable, OwnerQrCode } from '@/types/contracts/table-qr';
-import { OwnerHeader } from './OwnerHeader';
-import { type OwnerTabType } from './OwnerHeaderPills';
-import { OwnerMenuView } from './menu/OwnerMenuView';
-import { TableManagementView } from './tables/TableManagementView';
-import { TakeawayQrCard } from './settings/TakeawayQrCard';
-import { OwnerOrdersView } from './orders/OwnerOrdersView';
+} from "../../../docs/contracts/types";
+import type { OwnerTable, OwnerQrCode } from "@/types/contracts/table-qr";
+import { OwnerHeader } from "./OwnerHeader";
+import { type OwnerTabType } from "./OwnerHeaderPills";
+import { OwnerMenuView } from "./menu/OwnerMenuView";
+import { TableManagementView } from "./tables/TableManagementView";
+import { TakeawayQrCard } from "./settings/TakeawayQrCard";
+import { VietQrPaymentSettingsCard } from "./settings/VietQrPaymentSettingsCard";
+import { OwnerOrdersView } from "./orders/OwnerOrdersView";
 
-export type OwnerTabState = 'ready' | 'loading' | 'empty' | 'error';
+export type OwnerTabState = "ready" | "loading" | "empty" | "error";
 
 export interface OwnerShellProps {
   storeName: string;
@@ -42,7 +43,8 @@ export interface OwnerShellProps {
 function toOwnerTables(items: (TableSummary | OwnerTable)[]): OwnerTable[] {
   return items.map((t) => ({
     ...t,
-    updatedAt: (t as OwnerTable).updatedAt || '1970-01-01T00:00:00.000000+00:00',
+    updatedAt:
+      (t as OwnerTable).updatedAt || "1970-01-01T00:00:00.000000+00:00",
     qr: (t as OwnerTable).qr ?? null,
   }));
 }
@@ -61,28 +63,32 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
   acceptingOrders = true,
   orders,
   tables = [],
-  initialTab = 'orders',
+  initialTab = "orders",
   ownerName,
   roleLabel,
   isLoggingOut = false,
   logoutError = null,
-  tablesState = 'ready',
+  tablesState = "ready",
   onRetryTables,
   onLogout,
   logoutAction,
-  className = '',
+  className = "",
 }) => {
   const [activeTab, setActiveTab] = useState<OwnerTabType>(initialTab);
 
   // =========================================================================
   // KẾT NỐI API THỰC TẾ CHO TAB BÀN (R11 GET /api/owner/tables & R17 GET /api/owner/qr-codes)
   // =========================================================================
-  const [tablesList, setTablesList] = useState<OwnerTable[]>(toOwnerTables(tables));
+  const [tablesList, setTablesList] = useState<OwnerTable[]>(
+    toOwnerTables(tables),
+  );
   const [qrCodesList, setQrCodesList] = useState<OwnerQrCode[]>([]);
   const [currentTablesState, setCurrentTablesState] = useState<OwnerTabState>(
-    tables.length > 0 ? tablesState : 'loading'
+    tables.length > 0 ? tablesState : "loading",
   );
-  const [tablesErrorMessage, setTablesErrorMessage] = useState<string | null>(null);
+  const [tablesErrorMessage, setTablesErrorMessage] = useState<string | null>(
+    null,
+  );
   const [isFetchingTables, setIsFetchingTables] = useState<boolean>(false);
 
   // Nạp danh sách bàn từ R11 và danh sách QR từ R17 (Dùng khi user bấm "Làm mới" hoặc "Thử lại")
@@ -93,15 +99,15 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
 
     try {
       const [tablesRes, qrRes] = await Promise.all([
-        fetch('/api/owner/tables', {
-          credentials: 'include',
-          cache: 'no-store',
-          headers: { Accept: 'application/json' },
+        fetch("/api/owner/tables", {
+          credentials: "include",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
         }),
-        fetch('/api/owner/qr-codes', {
-          credentials: 'include',
-          cache: 'no-store',
-          headers: { Accept: 'application/json' },
+        fetch("/api/owner/qr-codes", {
+          credentials: "include",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
         }),
       ]);
 
@@ -123,13 +129,13 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
       }
 
       if (hasTablesData) {
-        setCurrentTablesState('ready');
+        setCurrentTablesState("ready");
         setIsFetchingTables(false);
         return;
       }
 
       // Xử lý lỗi từ server
-      let errMessage = 'Không thể tải sơ đồ bàn từ máy chủ.';
+      let errMessage = "Không thể tải sơ đồ bàn từ máy chủ.";
       try {
         const errJson = await tablesRes.json();
         if (errJson?.error?.message) {
@@ -140,10 +146,10 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
       }
 
       setTablesErrorMessage(errMessage);
-      setCurrentTablesState('error');
+      setCurrentTablesState("error");
     } catch {
-      setTablesErrorMessage('Lỗi mạng khi kết nối tới dịch vụ quản lý bàn.');
-      setCurrentTablesState('error');
+      setTablesErrorMessage("Lỗi mạng khi kết nối tới dịch vụ quản lý bàn.");
+      setCurrentTablesState("error");
     } finally {
       setIsFetchingTables(false);
     }
@@ -151,7 +157,7 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
 
   // Tự động tải dữ liệu khi chuyển sang tab bàn hoặc cài đặt (UI-01)
   useEffect(() => {
-    if (activeTab !== 'tables' && activeTab !== 'settings') return;
+    if (activeTab !== "tables" && activeTab !== "settings") return;
 
     let isCancelled = false;
     const timer = setTimeout(() => {
@@ -167,7 +173,9 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
   }, [activeTab, fetchTablesAndQRs]);
 
   return (
-    <div className={`min-h-screen bg-[#F5F6F5] p-2 sm:p-4 md:p-6 text-[#1D2522] ${className}`}>
+    <div
+      className={`min-h-screen bg-[#F5F6F5] p-2 sm:p-4 md:p-6 text-[#1D2522] ${className}`}
+    >
       {/* =====================================================================
           SHELL CONTAINER: Panel trắng bo tròn nổi trên nền xám nhạt
          ===================================================================== */}
@@ -190,27 +198,26 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
           {/* =================================================================
               TAB 1: ĐƠN HÀNG (Bố cục 70/30 Desktop, 1 cột Mobile/Tablet FIFO P3-G02)
              ================================================================= */}
-          {activeTab === 'orders' && (
-            <OwnerOrdersView
-              initialOrders={orders}
-              storeName={storeName}
-            />
+          {activeTab === "orders" && (
+            <OwnerOrdersView initialOrders={orders} storeName={storeName} />
           )}
 
           {/* =================================================================
               TAB 2: BÀN (Toàn diện: Danh sách, Thêm/Sửa, QR Preview/Tải/In, R12)
              ================================================================= */}
-          {activeTab === 'tables' && (
+          {activeTab === "tables" && (
             <TableManagementView
               tables={tablesList}
               qrCodes={qrCodesList}
               storeName={storeName}
-              isLoading={isFetchingTables || currentTablesState === 'loading'}
+              isLoading={isFetchingTables || currentTablesState === "loading"}
               errorMessage={tablesErrorMessage}
               onRefresh={fetchTablesAndQRs}
               onTableCreated={(newTable) => {
                 setTablesList((prev) => {
-                  const existingIdx = prev.findIndex((t) => t.id === newTable.id);
+                  const existingIdx = prev.findIndex(
+                    (t) => t.id === newTable.id,
+                  );
                   if (existingIdx >= 0) {
                     const copy = [...prev];
                     copy[existingIdx] = newTable;
@@ -228,72 +235,71 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
               }}
               onTableUpdated={(updatedTable) => {
                 setTablesList((prev) =>
-                  prev.map((t) => (t.id === updatedTable.id ? updatedTable : t))
+                  prev.map((t) =>
+                    t.id === updatedTable.id ? updatedTable : t,
+                  ),
                 );
                 fetchTablesAndQRs();
               }}
+              onNavigateToOrders={() => setActiveTab("orders")}
             />
           )}
 
           {/* =================================================================
               TAB 3: MENU (Quản lý món ăn P2-G02)
              ================================================================= */}
-          {activeTab === 'menu' && <OwnerMenuView />}
+          {activeTab === "menu" && <OwnerMenuView />}
 
           {/* =================================================================
               TAB 4: CÀI ĐẶT (Thiết lập quán & QR Mua mang đi tại quầy)
              ================================================================= */}
-          {activeTab === 'settings' && (
+          {activeTab === "settings" && (
             <div className="flex-1 max-w-3xl mx-auto w-full py-4 space-y-4">
               <div className="p-4 bg-white rounded-2xl border border-[#E9ECEA] shadow-xs">
-                <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1">
                   <h4 className="text-sm font-bold text-[#1D2522]">
                     1. Trạng thái nhận đơn của quán
                   </h4>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F1F3F2] text-[#727B77]">
-                    Thiết lập ở Phase 4
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#E8F4F0] text-[#1D725E] border border-[#C6E7DC]">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        acceptingOrders !== false
+                          ? "bg-[#1D725E] animate-pulse"
+                          : "bg-[#B42318]"
+                      }`}
+                    />
+                    <span className="whitespace-nowrap">
+                      {acceptingOrders !== false
+                        ? "Đang hoạt động"
+                        : "Tạm ngừng"}
+                    </span>
                   </span>
                 </div>
                 <p className="text-xs text-[#727B77] mb-3">
-                  Cấu hình bật/tắt nhận đơn trực tiếp qua API R19/R20 (Store Settings) sẽ được kết nối ở Phase 4. Hiện hiển thị theo trạng thái snapshot thực tế của quán.
+                  Quán đang mở cửa tiếp nhận đơn hàng tại bàn và mua mang đi qua
+                  mã QR. Khách hàng quét mã có thể xem thực đơn và gửi đơn.
                 </p>
-                <div
-                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold border ${
-                    acceptingOrders !== false
-                      ? 'bg-[#E8F4F0] text-[#1D725E] border-[#C6E7DC]'
-                      : 'bg-[#FEF3F2] text-[#B42318] border-[#FECDCA]'
-                  }`}
-                >
-                  <span>{acceptingOrders !== false ? '🟢 Đang mở cửa nhận đơn' : '🔴 Đang tạm ngừng nhận đơn'}</span>
-                </div>
               </div>
 
               {/* CARD 2: QR Mua mang đi tại quầy (P2-G04, lọc chính xác mã active chưa thu hồi theo UI-01) */}
               <TakeawayQrCard
                 storeName={storeName}
-                initialQrCode={qrCodesList.find((q) => q.type === 'takeaway' && q.active && !q.retiredAt)}
+                initialQrCode={qrCodesList.find(
+                  (q) => q.type === "takeaway" && q.active && !q.retiredAt,
+                )}
                 onQrUpdated={(updatedQr) => {
                   setQrCodesList((prev) => {
-                    const filtered = prev.filter((q) => q.type !== 'takeaway');
+                    const filtered = prev.filter((q) => q.type !== "takeaway");
                     return [...filtered, updatedQr];
                   });
                   fetchTablesAndQRs();
                 }}
               />
 
-              <div className="p-4 bg-white rounded-2xl border border-[#E9ECEA] shadow-xs opacity-90">
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <h4 className="text-sm font-bold text-[#1D2522]">
-                    3. Cổng thanh toán VietQR (Phase 4)
-                  </h4>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F1F3F2] text-[#727B77]">
-                    Thiết lập ở giai đoạn sau
-                  </span>
-                </div>
-                <p className="text-xs text-[#727B77]">
-                  Cấu hình tài khoản ngân hàng và đối soát thanh toán tự động qua Webhook sẽ được triển khai ở Phase 4. Hiện không lưu cấu hình giả lập.
-                </p>
-              </div>
+              {/* CARD 3: Cổng thanh toán VietQR (Tự động chuyển khoản qua PayOS Gateway) */}
+              <VietQrPaymentSettingsCard
+                onNavigateToOrders={() => setActiveTab("orders")}
+              />
             </div>
           )}
         </main>

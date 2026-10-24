@@ -1,6 +1,7 @@
 import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput, OpenTableSessionInput, OwnerSessionOpenedView } from "@contracts";
 import { menuRequest } from "@/features/customer/api-client";
 import type { OwnerTablePinView, RotateTablePinInput } from "@contracts";
+import type { TableBillView, SettleSessionInput, SessionSettlementResult } from "@contracts";
 import type { OwnerOrdersQuery, OwnerOrdersView, RequestCommand, OrderDetail, OrderTransitionInput, CompleteOrderInput } from "@contracts";
 import type { OwnerTableList, OwnerTable, OwnerQrCode, CreateTableInput, UpdateTableInput, WriteQrInput, RotateQrInput } from "@/types/contracts/table-qr";
 export { MenuApiError } from "@/features/customer/api-client";
@@ -27,3 +28,5 @@ export function getOwnerOrders(query: OwnerOrdersQuery = {}): Promise<OwnerOrder
 export const claimNextOrder = (input: RequestCommand): Promise<OrderDetail | null> => menuRequest("/api/owner/queue/claim-next", "POST", input);
 export const markOrderReady = (id: string, input: OrderTransitionInput): Promise<OrderDetail> => menuRequest(`/api/owner/orders/${encodeURIComponent(id)}/ready`, "POST", input);
 export const completeOrder = (id: string, input: CompleteOrderInput): Promise<OrderDetail> => menuRequest(`/api/owner/orders/${encodeURIComponent(id)}/complete`, "POST", input);
+export const fetchOwnerSessionBill = (id: string): Promise<TableBillView> => menuRequest(`/api/owner/table-sessions/${encodeURIComponent(id)}/bill`);
+export const settleOwnerSession = (id: string, input: SettleSessionInput): Promise<SessionSettlementResult> => menuRequest(`/api/owner/table-sessions/${encodeURIComponent(id)}/settle`, "POST", input);

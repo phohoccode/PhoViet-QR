@@ -1,0 +1,10 @@
+{
+  "scope": "loopback PostgreSQL + Supabase Auth + Next production HTTP",
+  "checks": 45,
+  "status": "PASS",
+  "orders": 4,
+  "successfulSettlements": 1,
+  "totalVnd": 248000,
+  "realtimePublisher": "absent; GET reconciliation verified",
+  "providerNetwork": "NOT_CALLED"
+}

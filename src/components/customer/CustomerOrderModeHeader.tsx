@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Store, ShoppingBag, CheckCircle2 } from 'lucide-react';
+import { Store, ShoppingBag, CheckCircle2, Receipt } from 'lucide-react';
 import type { StoreView, OrderType } from '../../../docs/contracts/types';
 import { CustomerModeBadge } from './CustomerModeBadge';
 
@@ -14,6 +14,7 @@ interface CustomerOrderModeHeaderProps {
   activeOrderTicket?: number | null;
   activeOrderStatus?: string | null;
   onTrackOrder?: () => void;
+  onOpenBill?: () => void;
   className?: string;
 }
 
@@ -23,7 +24,7 @@ interface CustomerOrderModeHeaderProps {
  * - Logo quán bên trái bo góc 12px, nền #E8F4F0, icon #1D725E.
  * - Tên quán đậm, kèm nhãn ngữ cảnh Bàn XX hoặc Mang đi.
  * - Mô tả ngắn gọn ngữ cảnh: "Đặt món tại bàn" vs "Đặt và thanh toán trước — nhận món tại quầy".
- * - Nút giỏ hàng nhỏ trên header đạt touch target >= 44x44px.
+ * - Nút Hóa đơn bàn (Dine-in) & Nút giỏ hàng nhỏ trên header đạt touch target >= 44x44px.
  */
 export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = ({
   store,
@@ -34,6 +35,7 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
   activeOrderTicket,
   activeOrderStatus,
   onTrackOrder,
+  onOpenBill,
   className = '',
 }) => {
   const isDineIn = mode === 'dine_in';
@@ -64,8 +66,21 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
         </div>
       </div>
 
-      {/* 2. Cụm nút hành động bên phải: Đơn đang xử lý & Nút giỏ hàng */}
+      {/* 2. Cụm nút hành động bên phải: Hóa đơn bàn, Đơn đang xử lý & Nút giỏ hàng */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        {/* Nút xem hóa đơn bàn cho khách ăn tại bàn */}
+        {isDineIn && onOpenBill && (
+          <button
+            type="button"
+            onClick={onOpenBill}
+            className="h-11 w-11 px-2.5 sm:px-3 rounded-xl bg-[#FAFBFB] border border-[#E9ECEA] hover:bg-[#E8F4F0] hover:border-[#35977D]/40 text-[#1D725E] text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+            aria-label="Xem hóa đơn phiên bàn hiện tại"
+          >
+            <Receipt className="w-4 h-4 text-[#1D725E]" aria-hidden="true" />
+            <span className="hidden xs:inline">Hóa đơn</span>
+          </button>
+        )}
+
         {activeOrderTicket ? (
           <button
             type="button"

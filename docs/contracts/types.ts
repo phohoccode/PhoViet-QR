@@ -205,6 +205,7 @@ export type ApiErrorCode =
   | 'PAYMENT_PROVIDER_UNAVAILABLE' | 'PAYMENT_REVIEW_REQUIRED'
   | 'INVALID_PICKUP_CODE' | 'PICKUP_CREDENTIAL_UNAVAILABLE' | 'PICKUP_NOT_ALLOWED' | 'ORDER_ALREADY_COMPLETED'
   | 'INVALID_STATE_TRANSITION' | 'DUPLICATE_REQUEST_CONFLICT'
+  | 'BILL_CHANGED' | 'SESSION_ORDERS_OUTSTANDING'
   | 'RATE_LIMITED' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'VALIDATION_ERROR'
   | 'STORE_NOT_ACCEPTING_ORDERS' | 'RESOURCE_NOT_FOUND' | 'INTERNAL_ERROR';
 export interface ApiErrorDetails {
@@ -279,10 +280,23 @@ export interface PrivateOrderTrackingView {
   pickup: { code: string; expiresAt: IsoTimestamp } | null; // six ASCII digits, only buyer scope
 }
 export type SettleSessionInput = RequestCommand & (
-  | { action: 'begin_checkout'; expectedVersion: number }
+  | { action: 'begin_checkout'; expectedVersion: number; expectedBillVersion: string }
   | { action: 'cancel_checkout'; expectedVersion: number }
-  | { action: 'confirm_received'; expectedVersion: number; paymentMethod: PaymentMethod }
+  | { action: 'confirm_received'; expectedVersion: number; expectedBillVersion: string; paymentMethod: PaymentMethod; receivedConfirmed: true }
 );
+/** Server computed financial revision. Fulfillment-only changes do not change billVersion. */
+export interface TableBillView {
+  table: TableRef;
+  session: TableSessionView;
+  orders: Extract<OrderDetail, { type: 'dine_in' }>[];
+  totalVnd: MoneyVnd;
+  billVersion: string;
+  outstandingOrders: number;
+  canAcceptMoreOrders: boolean;
+  canSettle: boolean;
+  settledAt: IsoTimestamp | null;
+  paymentMethod: PaymentMethod | null;
+}
 export interface SettlementView {
   id: Id;
   tableSessionId: Id;
@@ -292,6 +306,7 @@ export interface SettlementView {
   settledAt: IsoTimestamp;
 }
 export interface SettleSessionView { detail: TableSessionDetail; settlement: SettlementView | null }
+export interface SessionSettlementResult extends SettleSessionView { bill: TableBillView }
 export interface OwnerMenuItem extends MenuItem { active: boolean }
 export interface OwnerMenuView {
   categories: (MenuCategory & { active: boolean })[];

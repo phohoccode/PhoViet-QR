@@ -36,7 +36,7 @@ export const OwnerHeaderPills: React.FC<OwnerHeaderPillsProps> = ({
 }) => {
   return (
     <nav
-      className={`inline-flex items-center p-1 bg-[#F7F8F7] border border-[#E9ECEA] rounded-full shadow-inner max-w-full overflow-x-auto scrollbar-none ${className}`}
+      className={`inline-flex items-center p-1 bg-[#F7F8F7] border border-[#E9ECEA] rounded-full max-w-full overflow-x-auto scrollbar-none ${className}`}
       aria-label="Các phân hệ quản trị của chủ quán"
     >
       {TABS.map((tab) => {

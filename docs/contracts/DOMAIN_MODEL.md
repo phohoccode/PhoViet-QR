@@ -59,6 +59,8 @@ Chỉ hai vai trò: guest không login và owner đăng nhập Supabase Auth, g�
 
 ## Naming và khác biệt domain/DB có chủ ý
 
+P5-C01 implementation amendment: manual dine-in ledger is `session_settlements` with succeeded rows only. Checkout attempts are preserved separately in `session_checkout_snapshots`; lifecycle actions are in `session_settlement_audit_log`. `received_confirmed=true`, actor/time/request, financial snapshot and DB unique success are required. The older conceptual pending/failed settlement model above is superseded by [P5_SESSION_BILLING.md](P5_SESSION_BILLING.md).
+
 Ngoài quy tắc camelCase → snake_case một-một cho các trường còn lại, danh sách khác biệt có chủ ý của v0.1 là:
 
 | Domain / DTO | DB / nguồn thật | Giải thích |

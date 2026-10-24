@@ -53,6 +53,8 @@ interface PreCheckoutReviewProps {
   onGoToVerifyTable?: () => void;
   onOrderConfirmed?: (order: OrderDetail) => void;
   onCloseSheet?: () => void;
+  isCheckoutPending?: boolean;
+  isSessionClosed?: boolean;
   isDemo?: boolean;
   className?: string;
 }
@@ -73,6 +75,8 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
   onGoToVerifyTable,
   onOrderConfirmed,
   onCloseSheet,
+  isCheckoutPending = false,
+  isSessionClosed = false,
   isDemo = false,
   className = '',
 }) => {
@@ -145,6 +149,8 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
     subtotalVnd !== null &&
     items.length > 0 &&
     isTableVerified &&
+    !isCheckoutPending &&
+    !isSessionClosed &&
     checkout.status !== 'submitting';
 
   const canSubmitTakeaway =
@@ -227,6 +233,31 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
             <p className="text-xs text-[#1D725E] leading-relaxed">
               Sau khi xác nhận đơn, quán sẽ bắt đầu chuẩn bị món. Quý khách thanh toán tại bàn hoặc quầy thu ngân khi kết thúc bữa ăn.
             </p>
+          </div>
+        )}
+
+        {/* Cảnh báo phiên đang chốt thanh toán hoặc đã đóng */}
+        {!isTakeaway && isCheckoutPending && (
+          <div className="p-3.5 rounded-xl bg-[#FEF6EE] border border-[#F9DBAF] flex items-start gap-2.5 text-xs text-[#8A4D00]">
+            <AlertCircle className="w-4 h-4 text-[#B54708] flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-bold text-[#B54708]">Bàn đang được thanh toán</p>
+              <p className="text-[11px] mt-0.5 text-[#8A4D00]">
+                Bạn không thể gọi thêm món lúc này. Vui lòng đợi nhân viên hoàn tất hoặc hủy thanh toán.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!isTakeaway && isSessionClosed && (
+          <div className="p-3.5 rounded-xl bg-[#F0F2F1] border border-[#E9ECEA] flex items-start gap-2.5 text-xs text-[#55605C]">
+            <CheckCircle2 className="w-4 h-4 text-[#1D725E] flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-bold text-[#1D2522]">Phiên bàn đã kết thúc</p>
+              <p className="text-[11px] mt-0.5 text-[#55605C]">
+                Hóa đơn đã được thanh toán và phiên bàn đã đóng. Vui lòng liên hệ nhân viên quán nếu quý khách cần phục vụ thêm.
+              </p>
+            </div>
           </div>
         )}
 
@@ -460,6 +491,34 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
 
             <p className="text-[11px] text-[#8A4D00] text-center leading-tight">
               Bàn chưa được xác thực. Bạn cần nhập mã phiên bàn trước khi gửi đơn.
+            </p>
+          </div>
+        ) : isCheckoutPending ? (
+          <div className="space-y-2">
+            <button
+              type="button"
+              disabled={true}
+              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#FAFBFB] text-[#A0A8A5] border border-[#E9ECEA] flex items-center justify-center gap-2 cursor-not-allowed"
+              aria-label="Bàn đang thanh toán — Đã khóa gọi thêm"
+            >
+              <span>Bàn đang thanh toán — Đã khóa gọi thêm</span>
+            </button>
+            <p className="text-[11px] text-[#B54708] text-center leading-tight font-medium">
+              Bàn đang được thanh toán. Bạn không thể gọi thêm món lúc này.
+            </p>
+          </div>
+        ) : isSessionClosed ? (
+          <div className="space-y-2">
+            <button
+              type="button"
+              disabled={true}
+              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#FAFBFB] text-[#A0A8A5] border border-[#E9ECEA] flex items-center justify-center gap-2 cursor-not-allowed"
+              aria-label="Phiên bàn đã kết thúc"
+            >
+              <span>Phiên bàn đã kết thúc</span>
+            </button>
+            <p className="text-[11px] text-[#727B77] text-center leading-tight">
+              Hóa đơn đã được thanh toán và phiên bàn đã đóng.
             </p>
           </div>
         ) : checkout.status === 'submitting' ? (

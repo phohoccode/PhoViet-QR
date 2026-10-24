@@ -23,6 +23,7 @@ import {
   AlertCircle,
   AlertTriangle,
   RefreshCw,
+  Receipt,
 } from "lucide-react";
 import type { MenuItem } from "../../../../docs/contracts/types";
 import type {
@@ -62,6 +63,9 @@ interface CartSheetProps {
   onOrderConfirmed?: (order: OrderDetail) => void;
   activeOrder?: ActiveOrderSummary | null;
   onTrackOrder?: (orderId: string) => void;
+  isCheckoutPending?: boolean;
+  isSessionClosed?: boolean;
+  onOpenBill?: () => void;
 }
 
 export const CartSheet: React.FC<CartSheetProps> = ({
@@ -82,6 +86,9 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   onOrderConfirmed,
   activeOrder,
   onTrackOrder,
+  isCheckoutPending = false,
+  isSessionClosed = false,
+  onOpenBill,
 }) => {
   // Hook xử lý checkout đặt món Dine-in được lift lên CartSheet để giữ nguyên intent (F01)
   const checkout = useDineInCheckout({
@@ -223,6 +230,8 @@ export const CartSheet: React.FC<CartSheetProps> = ({
               onGoToVerifyTable?.();
             }}
             isDemo={isDemo}
+            isCheckoutPending={isCheckoutPending}
+            isSessionClosed={isSessionClosed}
           />
         ) : (
           /* ===================================================================
@@ -486,7 +495,48 @@ export const CartSheet: React.FC<CartSheetProps> = ({
                   </span>
                 </div>
 
-                {checkout.status === "uncertain" ? (
+                {isCheckoutPending ? (
+                  <div className="space-y-2">
+                    <div className="p-3 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] text-[11px] text-[#D92D20] space-y-1">
+                      <p className="font-bold">Bàn đang được thanh toán. Bạn không thể gọi thêm món lúc này.</p>
+                      <p className="text-[#55605C]">Quán đang chốt tiền cho bàn của bạn. Nếu cần gọi thêm, vui lòng báo nhân viên phục vụ.</p>
+                    </div>
+                    {onOpenBill && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleAnimatedClose();
+                          onOpenBill();
+                        }}
+                        className="w-full h-11 rounded-xl text-xs font-bold bg-[#E8F4F0] border border-[#35977D]/40 text-[#1D725E] flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Receipt className="w-4 h-4" />
+                        <span>Xem hóa đơn bàn</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={true}
+                      className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#F1F3F2] text-[#A0A8A5] cursor-not-allowed flex items-center justify-center"
+                    >
+                      Bàn đang thanh toán — Đã khóa gọi thêm
+                    </button>
+                  </div>
+                ) : isSessionClosed ? (
+                  <div className="space-y-2">
+                    <div className="p-3 rounded-xl bg-[#ECFDF3] border border-[#ABEFC6] text-[11px] text-[#027A48]">
+                      <p className="font-bold">Hóa đơn bàn đã được thanh toán.</p>
+                      <p className="text-[#55605C] mt-0.5">Vui lòng liên hệ nhân viên để mở bàn nếu muốn gọi thêm bữa mới.</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={true}
+                      className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#F1F3F2] text-[#A0A8A5] cursor-not-allowed flex items-center justify-center"
+                    >
+                      Phiên bàn đã kết thúc
+                    </button>
+                  </div>
+                ) : checkout.status === "uncertain" ? (
                   <button
                     type="button"
                     onClick={() => setCurrentStep("review")}

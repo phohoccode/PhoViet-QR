@@ -1,0 +1,121 @@
+{
+  "recordedAt": "2026-10-24T06:16:54.895Z",
+  "scope": "local PostgreSQL; readonly catalog inspection; no production/provider calls",
+  "databaseCatalog": {
+    "functions": [
+      {
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "bodyMd5": "6c889f37dd4e112d46fe1c292372b999",
+        "signature": "p5_bill_version(uuid)",
+        "anonExecute": false,
+        "serviceExecute": true,
+        "securityDefiner": false,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "bodyMd5": "23f6fbaedf265284b759f745efd7026c",
+        "signature": "p5_session_bill(uuid)",
+        "anonExecute": false,
+        "serviceExecute": true,
+        "securityDefiner": false,
+        "authenticatedExecute": false
+      },
+      {
+        "config": [
+          "search_path=pg_catalog",
+          "lock_timeout=3s"
+        ],
+        "bodyMd5": "32699e88b97d7620ef3e93e960ba0f0d",
+        "signature": "p5_session_execute(text,jsonb)",
+        "anonExecute": false,
+        "serviceExecute": true,
+        "securityDefiner": false,
+        "authenticatedExecute": false
+      }
+    ],
+    "deferredGuards": [
+      {
+        "name": "session_settlement_consistency",
+        "deferred": true,
+        "deferrable": true
+      },
+      {
+        "name": "settled_order_consistency",
+        "deferred": true,
+        "deferrable": true
+      }
+    ],
+    "financialTables": [
+      {
+        "rls": true,
+        "name": "session_checkout_snapshots",
+        "anonSelect": false,
+        "serviceDelete": false,
+        "serviceUpdate": false,
+        "authenticatedInsert": false
+      },
+      {
+        "rls": true,
+        "name": "session_settlement_audit_log",
+        "anonSelect": false,
+        "serviceDelete": false,
+        "serviceUpdate": false,
+        "authenticatedInsert": false
+      },
+      {
+        "rls": true,
+        "name": "session_settlements",
+        "anonSelect": false,
+        "serviceDelete": false,
+        "serviceUpdate": false,
+        "authenticatedInsert": false
+      }
+    ],
+    "uniqueSettlementIndex": "CREATE UNIQUE INDEX session_settlements_one_success ON public.session_settlements USING btree (table_session_id) WHERE (status = 'succeeded'::text)"
+  },
+  "executedChecks": {
+    "integration": {
+      "files": 19,
+      "passed": 144
+    },
+    "billingAfterCleanupFix": {
+      "passed": 17
+    },
+    "unit": {
+      "passed": 131
+    },
+    "auth": {
+      "passed": 46
+    },
+    "db": {
+      "passed": 9
+    },
+    "uiFixtureTests": {
+      "files": 21,
+      "passed": 257,
+      "browserE2E": false
+    },
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "build": "PASS"
+  },
+  "financialRace": {
+    "concurrentCreateAttempts": 50,
+    "concurrentSameKeySettles": 20,
+    "concurrentOwnerPrepares": 2,
+    "cancelVsSettle": true,
+    "sessionCloseVsTakeawayVsOtherTable": true
+  },
+  "acceptance": {
+    "backendLocal": "PASS",
+    "integratedPhase5": "NOT_READY",
+    "browserE2E": "NOT_RUN",
+    "production": "NOT_TOUCHED",
+    "providerNetwork": "NOT_CALLED"
+  }
+}

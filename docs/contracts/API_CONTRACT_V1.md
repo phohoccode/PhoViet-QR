@@ -370,6 +370,8 @@ Errors use standard envelope:400 VALIDATION_ERROR,401 UNAUTHORIZED,403 FORBIDDEN
 
 ## R13 — POST /api/owner/table-sessions/:id/settle
 
+**P5-C01 implemented amendment:** see [P5_SESSION_BILLING.md](P5_SESSION_BILLING.md) for actual GET bill routes, required `expectedBillVersion`, `receivedConfirmed:true`, strict input, `SessionSettlementResult.bill`, financial revision and explicit blockers. The request examples below describe the older draft and must not be sent unchanged.
+
 O; path session; `SettleSessionInput` tagged union required requestId + action + expectedVersion. `action=begin_checkout`: open→checkout_pending, lock session chặn order mới, trả bill snapshot; `cancel_checkout`: checkout_pending→open nếu chưa settlement success; `confirm_received`: chỉ checkout_pending và mọi non-cancelled order completed theo ASSUMPTION Q6, required `paymentMethod:cash|bank_transfer`. Không nhận totalVnd client, không guest set paid. UI luôn begin trước confirm, không direct open→confirm. Tính bill từ snapshots, settlement success+close+revoke+version changes/audit/outbox cùng transaction; một success/phiên. Không thu tiền qua takeaway provider.
 
 200 SettleSessionView. Ví dụ phiên trống được đóng 0 VND (ASSUMPTION Q6), còn phiên có đơn phải trả đầy đủ orders trong detail và tổng khớp:

@@ -313,13 +313,20 @@ export const TakeawayQrCard: React.FC<TakeawayQrCardProps> = ({
                 </h4>
                 {currentQr && (
                   <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
                       currentQr.active
-                        ? "bg-[#E8F4F0] text-[#1D725E]"
-                        : "bg-[#FEF3F2] text-[#B42318]"
+                        ? "bg-[#E8F4F0] text-[#1D725E] border-[#C6E7DC]"
+                        : "bg-[#F1F3F2] text-[#727B77] border-[#E9ECEA]"
                     }`}
                   >
-                    {currentQr.active ? "🟢 Đang hoạt động" : "⚪ Đã vô hiệu"}
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        currentQr.active
+                          ? "bg-[#1D725E] animate-pulse"
+                          : "bg-[#727B77]"
+                      }`}
+                    />
+                    <span className="whitespace-nowrap">{currentQr.active ? "Đang hoạt động" : "Đã vô hiệu"}</span>
                   </span>
                 )}
               </div>
@@ -497,7 +504,7 @@ export const TakeawayQrCard: React.FC<TakeawayQrCardProps> = ({
                 className="h-10 px-3 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-xs"
               >
                 <Printer className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>{isPrinting ? "Đang mở in..." : "In phiếu quầy"}</span>
+                <span>{isPrinting ? "Đang mở in..." : "In phiếu"}</span>
               </button>
             </div>
 

@@ -1,4 +1,5 @@
 import type {
+  TableBillView,
   ApiError,
   ApiResponse,
   MenuV1View,
@@ -80,3 +81,5 @@ export const verifyPublicTableSession = (
   input: TableSessionVerifyInput,
 ): Promise<QRResolution> =>
   menuRequest("/api/public/table-sessions/verify", "POST", input);
+export const fetchPublicSessionBill = (qrCode: string): Promise<TableBillView> =>
+  menuRequest(`/api/public/table-sessions/current/bill?qrCode=${encodeURIComponent(qrCode)}`);

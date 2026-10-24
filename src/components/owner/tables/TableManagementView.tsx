@@ -9,6 +9,8 @@ import {
   Power,
   Search,
   MoreVertical,
+  UtensilsCrossed,
+  Clock,
 } from 'lucide-react';
 import type {
   OwnerSessionOpenedView,
@@ -17,11 +19,15 @@ import type { OwnerTable, OwnerQrCode } from '@/types/contracts/table-qr';
 import {
   openOwnerTableSession,
   updateOwnerTable,
+  fetchOwnerSessionBill,
+  settleOwnerSession,
   MenuApiError,
 } from '@/features/owner/api-client';
 import { AddEditTableDialog } from './AddEditTableDialog';
 import { TableQrModal } from './TableQrModal';
-import { TableSessionOpenedDialog, TableDetailDialog } from '../TableSessionDialog';
+import { TableSessionOpenedDialog } from '../TableSessionDialog';
+import { TableBillSettlementSheet } from './TableBillSettlementSheet';
+import type { TableBillView, TablePaymentMethod } from '../../customer/bill/types';
 import { OwnerErrorState } from '../OwnerErrorState';
 import { OwnerEmptyState } from '../OwnerEmptyState';
 import { TablesGridSkeleton } from '../OwnerTabSkeletons';
@@ -39,6 +45,27 @@ export interface TableManagementViewProps {
   onRevealTablePin?: (tableId: string) => Promise<{ pin: string; isLegacy?: boolean }>;
   onRotateTablePin?: (tableId: string) => Promise<{ pin: string }>;
   onMigrateLegacyTablePin?: (tableId: string) => Promise<{ pin: string }>;
+  // Phase 5 Dine-in Settlement props
+  onFetchTableBill?: (tableId: string, sessionId: string) => Promise<TableBillView>;
+  onBeginTableCheckout?: (
+    sessionId: string,
+    expectedVersion: string | number,
+    expectedBillVersion?: string,
+    requestId?: string
+  ) => Promise<TableBillView | void>;
+  onCancelTableCheckout?: (
+    sessionId: string,
+    expectedVersion: string | number,
+    requestId?: string
+  ) => Promise<TableBillView | void>;
+  onConfirmTableSettlement?: (
+    sessionId: string,
+    expectedVersion: string | number,
+    paymentMethod: TablePaymentMethod,
+    expectedBillVersion?: string,
+    requestId?: string
+  ) => Promise<TableBillView | void>;
+  onNavigateToOrders?: () => void;
 }
 
 /**
@@ -60,6 +87,11 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
   onRevealTablePin,
   onRotateTablePin,
   onMigrateLegacyTablePin,
+  onFetchTableBill,
+  onBeginTableCheckout,
+  onCancelTableCheckout,
+  onConfirmTableSettlement,
+  onNavigateToOrders,
 }) => {
   // Bộ lọc & tìm kiếm
   const [searchQuery, setSearchQuery] = useState('');
@@ -70,6 +102,30 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
   const [tableToEdit, setTableToEdit] = useState<OwnerTable | null>(null);
   const [selectedTableForQr, setSelectedTableForQr] = useState<OwnerTable | null>(null);
   const [selectedTableForDetail, setSelectedTableForDetail] = useState<OwnerTable | null>(null);
+
+  // Phase 5 Hóa đơn bàn state
+  const [tableBill, setTableBill] = useState<TableBillView | null>(null);
+  const [isLoadingTableBill, setIsLoadingTableBill] = useState(false);
+  const [tableBillError, setTableBillError] = useState<string | null>(null);
+
+  // Tự động tải hóa đơn bàn khi mở chi tiết bàn
+  const handleOpenTableDetail = (t: OwnerTable) => {
+    setSelectedTableForDetail(t);
+    if (t.session) {
+      setIsLoadingTableBill(true);
+      setTableBillError(null);
+      const fetchFn = onFetchTableBill
+        ? onFetchTableBill(t.id, t.session.id)
+        : fetchOwnerSessionBill(t.session.id);
+
+      Promise.resolve(fetchFn)
+        .then((b) => setTableBill(b))
+        .catch((err) => {
+          setTableBillError(err instanceof Error ? err.message : 'Không thể tải hóa đơn.');
+        })
+        .finally(() => setIsLoadingTableBill(false));
+    }
+  };
 
   // Mở phiên bàn (R12)
   const [openingTableId, setOpeningTableId] = useState<string | null>(null);
@@ -495,25 +551,29 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Badges trạng thái bàn */}
+                  {/* Badges trạng thái bàn: Chữ + Icon + Màu */}
                   <div className="flex flex-wrap items-center gap-1.5 mb-3">
                     {isInactive ? (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F1F3F2] text-[#727B77]">
-                        Ngưng dùng
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F1F3F2] text-[#727B77] flex items-center gap-1">
+                        <Power className="w-2.5 h-2.5" />
+                        <span>Ngưng dùng</span>
                       </span>
                     ) : isOccupied ? (
                       isCheckoutPending ? (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#FEE4E2] text-[#B42318]">
-                          Chờ thanh toán
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#FEE4E2] text-[#B42318] border border-[#FECDCA] flex items-center gap-1 animate-pulse">
+                          <Clock className="w-2.5 h-2.5" />
+                          <span>Chờ thanh toán</span>
                         </span>
                       ) : (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#E8F4F0] text-[#1D725E]">
-                          Có khách ({t.session?.orderCount ?? 0} món)
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#E8F4F0] text-[#1D725E] border border-[#C6E7DC] flex items-center gap-1">
+                          <UtensilsCrossed className="w-2.5 h-2.5" />
+                          <span>Có khách ({t.session?.orderCount ?? 0} món)</span>
                         </span>
                       )
                     ) : (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F7F8F7] text-[#727B77] border border-[#E9ECEA]">
-                        Bàn trống
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F7F8F7] text-[#727B77] border border-[#E9ECEA] flex items-center gap-1">
+                        <UtensilsCrossed className="w-2.5 h-2.5 text-[#A0A8A5]" />
+                        <span>Bàn trống</span>
                       </span>
                     )}
 
@@ -549,7 +609,7 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedTableForQr(t)}
-                      className="h-8 px-2 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-xs font-semibold text-[#1D2522] flex items-center justify-center gap-1 transition-colors"
+                      className="h-9 sm:h-10 min-h-[36px] px-2.5 rounded-xl border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-xs font-semibold text-[#1D2522] flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
                       title="Xem mã QR dán bàn"
                     >
                       <QrCode className="w-3.5 h-3.5 text-[#35977D]" aria-hidden="true" />
@@ -560,8 +620,8 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
                     {isOccupied ? (
                       <button
                         type="button"
-                        onClick={() => setSelectedTableForDetail(t)}
-                        className="h-8 px-2 rounded-xl bg-[#E8F4F0] hover:bg-[#D3EDE4] text-xs font-bold text-[#1D725E] flex items-center justify-center gap-1 transition-colors"
+                        onClick={() => handleOpenTableDetail(t)}
+                        className="h-9 sm:h-10 min-h-[36px] px-2.5 rounded-xl bg-[#E8F4F0] hover:bg-[#D3EDE4] text-xs font-bold text-[#1D725E] flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
                       >
                         <span>Chi tiết</span>
                       </button>
@@ -570,7 +630,7 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
                         type="button"
                         onClick={() => handleOpenTableSession(t)}
                         disabled={isOpening || isInactive}
-                        className={`h-8 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+                        className={`h-9 sm:h-10 min-h-[36px] px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
                           isInactive
                             ? 'bg-[#E9ECEA] text-[#A0A8A5] cursor-not-allowed'
                             : isOpening
@@ -659,16 +719,82 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
         />
       )}
 
-      {/* Modal Chi tiết phiên bàn (Xem bill, trạng thái thanh toán & PIN) */}
+      {/* Sheet Chi tiết phiên bàn & Hóa đơn chốt tiền (Phase 5) */}
       {selectedTableForDetail && (
-        <TableDetailDialog
+        <TableBillSettlementSheet
+          isOpen={Boolean(selectedTableForDetail)}
           table={selectedTableForDetail}
+          bill={tableBill}
+          isLoadingBill={isLoadingTableBill}
+          billErrorMessage={tableBillError}
+          onRefreshBill={async () => {
+            if (selectedTableForDetail?.session) {
+              setIsLoadingTableBill(true);
+              try {
+                const b = onFetchTableBill
+                  ? await onFetchTableBill(selectedTableForDetail.id, selectedTableForDetail.session.id)
+                  : await fetchOwnerSessionBill(selectedTableForDetail.session.id);
+                setTableBill(b);
+              } catch (err) {
+                setTableBillError(err instanceof Error ? err.message : 'Lỗi tải lại hóa đơn.');
+              } finally {
+                setIsLoadingTableBill(false);
+              }
+            } else {
+              onRefresh?.();
+            }
+          }}
           qrCode={
             qrCodes.find(
               (q) => q.type === 'table' && q.table?.id === selectedTableForDetail.id
             ) ?? selectedTableForDetail.qr
           }
-          onClose={() => setSelectedTableForDetail(null)}
+          onClose={() => {
+            setSelectedTableForDetail(null);
+            setTableBill(null);
+            setTableBillError(null);
+          }}
+          onBeginCheckout={
+            onBeginTableCheckout ||
+            (async (sessionId, expectedVersion, expectedBillVersion, requestId) => {
+              const res = await settleOwnerSession(sessionId, {
+                requestId: requestId || crypto.randomUUID(),
+                action: 'begin_checkout',
+                expectedVersion: Number(expectedVersion),
+                expectedBillVersion: String(expectedBillVersion || ''),
+              });
+              return res.bill;
+            })
+          }
+          onCancelCheckout={
+            onCancelTableCheckout ||
+            (async (sessionId, expectedVersion, requestId) => {
+              const res = await settleOwnerSession(sessionId, {
+                requestId: requestId || crypto.randomUUID(),
+                action: 'cancel_checkout',
+                expectedVersion: Number(expectedVersion),
+              });
+              return res.bill;
+            })
+          }
+          onConfirmSettlement={
+            onConfirmTableSettlement ||
+            (async (sessionId, expectedVersion, paymentMethod, expectedBillVersion, requestId) => {
+              const res = await settleOwnerSession(sessionId, {
+                requestId: requestId || crypto.randomUUID(),
+                action: 'confirm_received',
+                expectedVersion: Number(expectedVersion),
+                expectedBillVersion: String(expectedBillVersion || ''),
+                paymentMethod,
+                receivedConfirmed: true,
+              });
+              return res.bill;
+            })
+          }
+          onNavigateToOrders={onNavigateToOrders}
+          onRevealPin={onRevealTablePin}
+          onRotatePin={onRotateTablePin}
+          onMigrateLegacyPin={onMigrateLegacyTablePin}
           onSessionUpdated={(tableId, pinView) => {
             const targetTable = tables.find((t) => t.id === tableId);
             if (targetTable && targetTable.session) {
@@ -683,10 +809,16 @@ export const TableManagementView: React.FC<TableManagementViewProps> = ({
             }
             onRefresh?.();
           }}
-          onRefresh={onRefresh}
-          onRevealPin={onRevealTablePin}
-          onRotatePin={onRotateTablePin}
-          onMigrateLegacyPin={onMigrateLegacyTablePin}
+          onTableSessionClosed={(tableId) => {
+            const targetTable = tables.find((t) => t.id === tableId);
+            if (targetTable) {
+              onTableUpdated?.({
+                ...targetTable,
+                session: null,
+              });
+            }
+            onRefresh?.();
+          }}
         />
       )}
     </div>

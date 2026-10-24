@@ -9,6 +9,7 @@ export interface ActiveOrderSummary {
   itemCount: number;
   totalVnd: number;
   tableLabel?: string;
+  sessionId?: string;
   updatedAt?: string;
 }
 
