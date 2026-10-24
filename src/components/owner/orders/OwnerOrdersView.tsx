@@ -154,6 +154,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
     selectedOrderIdRef.current = null;
     setSelectedOrderId(null);
     setSelectedOrder(null);
+    setIsMobileSheetOpen(false);
     setIsLoading(true);
     setErrorMessage(null);
     setView(newView);
@@ -163,6 +164,10 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
   // Xử lý chuyển đổi loại đơn (Tất cả / Tại bàn / Mang đi)
   const handleTypeChange = useCallback((newType: OrderTypeFilter) => {
     if (newType === typeFilter) return;
+    selectedOrderIdRef.current = null;
+    setSelectedOrderId(null);
+    setSelectedOrder(null);
+    setIsMobileSheetOpen(false);
     setIsLoading(true);
     setErrorMessage(null);
     setTypeFilter(newType);
@@ -171,6 +176,10 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
   // Xử lý chuyển đổi tab trạng thái
   const handleStatusChange = useCallback((newStatus: OrderStatusFilter) => {
     if (newStatus === statusFilter) return;
+    selectedOrderIdRef.current = null;
+    setSelectedOrderId(null);
+    setSelectedOrder(null);
+    setIsMobileSheetOpen(false);
     setIsLoading(true);
     setErrorMessage(null);
     setStatusFilter(newStatus);
@@ -240,12 +249,39 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         setNextCursor(data.nextCursor);
         setLastUpdated(new Date());
 
-        // Cập nhật chi tiết đơn đang chọn nếu server trả về trong snapshot
-        if (data.detail) {
-          setSelectedOrder(data.detail);
-        } else if (selectedOrderId && !data.orders.some((o) => o.id === selectedOrderId)) {
-          // Nếu đơn đã biến mất khỏi filter hiện tại
+        // Cập nhật chi tiết đơn đang chọn: Nếu tab không có đơn nào -> reset toàn bộ
+        if (data.orders.length === 0) {
+          setSelectedOrderId(null);
           setSelectedOrder(null);
+          selectedOrderIdRef.current = null;
+          setIsMobileSheetOpen(false);
+        } else {
+          const currentId = selectedOrderIdRef.current;
+          const match = currentId && data.orders.some((o) => o.id === currentId);
+          if (match) {
+            if (data.detail && data.detail.id === currentId) {
+              setSelectedOrder(data.detail);
+            }
+          } else {
+            // Đơn đang chọn đã biến mất khỏi filter hiện tại -> mặc định chọn đơn đầu tiên
+            const firstId = data.orders[0].id;
+            setSelectedOrderId(firstId);
+            selectedOrderIdRef.current = firstId;
+            if (data.detail && data.detail.id === firstId) {
+              setSelectedOrder(data.detail);
+            } else {
+              void (async () => {
+                try {
+                  const detailRes = await getOwnerOrders({ orderId: firstId, limit: 1 });
+                  if (fetchGen === fetchGenerationRef.current && detailRes.detail) {
+                    setSelectedOrder(detailRes.detail);
+                  }
+                } catch {
+                  // Fallback giữ nguyên
+                }
+              })();
+            }
+          }
         }
 
         // Lên lịch poll lần tiếp theo sau 6 giây (5–8s khuyến nghị) nếu màn hình hiển thị
@@ -294,7 +330,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         }
       }
     },
-    [buildQuery, selectedOrderId, showToast]
+    [buildQuery, showToast]
   );
 
   // F05: Tải thêm đơn theo keyset pagination khi có nextCursor
@@ -345,31 +381,43 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         setNextCursor(data.nextCursor);
         setLastUpdated(new Date());
 
-        if (data.detail) {
-          setSelectedOrder(data.detail);
-          setSelectedOrderId(data.detail.id);
-          selectedOrderIdRef.current = data.detail.id;
-        } else if (data.orders.length > 0) {
-          const match = selectedOrderIdRef.current && data.orders.some((o) => o.id === selectedOrderIdRef.current);
-          if (!match) {
-            const firstId = data.orders[0].id;
-            setSelectedOrderId(firstId);
-            selectedOrderIdRef.current = firstId;
-            void (async () => {
-              try {
-                const detailRes = await getOwnerOrders({ orderId: firstId, limit: 1 });
-                if (!cancelled && fetchGen === fetchGenerationRef.current && detailRes.detail) {
-                  setSelectedOrder(detailRes.detail);
-                }
-              } catch {
-                // Giữ nguyên fallback
-              }
-            })();
-          }
-        } else {
+        if (data.orders.length === 0) {
           setSelectedOrderId(null);
           setSelectedOrder(null);
           selectedOrderIdRef.current = null;
+          setIsMobileSheetOpen(false);
+        } else {
+          const currentId = selectedOrderIdRef.current;
+          const match = currentId && data.orders.some((o) => o.id === currentId);
+          if (match) {
+            if (data.detail && data.detail.id === currentId) {
+              setSelectedOrder(data.detail);
+            }
+          } else {
+            // Mặc định chọn đơn đầu tiên của danh sách
+            const firstId = data.orders[0].id;
+            setSelectedOrderId(firstId);
+            selectedOrderIdRef.current = firstId;
+            if (data.detail && data.detail.id === firstId) {
+              setSelectedOrder(data.detail);
+            } else {
+              setIsLoadingDetail(true);
+              void (async () => {
+                try {
+                  const detailRes = await getOwnerOrders({ orderId: firstId, limit: 1 });
+                  if (!cancelled && fetchGen === fetchGenerationRef.current && detailRes.detail) {
+                    setSelectedOrder(detailRes.detail);
+                  }
+                } catch {
+                  // Giữ nguyên fallback
+                } finally {
+                  if (!cancelled && fetchGen === fetchGenerationRef.current) {
+                    setIsLoadingDetail(false);
+                  }
+                }
+              })();
+            }
+          }
         }
 
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
@@ -427,6 +475,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
   const handleSelectOrder = useCallback(
     async (orderId: string) => {
       setSelectedOrderId(orderId);
+      selectedOrderIdRef.current = orderId;
       setIsMobileSheetOpen(true);
 
       // Nếu đơn này đã có lines trong selectedOrder hiện tại
@@ -485,6 +534,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
       // Đã nhận được đơn cũ nhất theo FIFO: tự động chọn đơn này
       setSelectedOrderId(claimedOrder.id);
       setSelectedOrder(claimedOrder);
+      selectedOrderIdRef.current = claimedOrder.id;
       const ticketStr = claimedOrder.ticketNo
         ? `#${String(claimedOrder.ticketNo).padStart(3, '0')}`
         : `#${claimedOrder.id.slice(0, 6)}`;
