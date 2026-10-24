@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import { Coffee, Plus, ChevronRight } from 'lucide-react';
 import type { MenuItem } from '../../../docs/contracts/types';
@@ -16,14 +16,16 @@ interface MenuItemPreviewCardProps {
 /**
  * MenuItemPreviewCard — Thẻ món ăn trình diễn cho danh sách thực đơn của khách.
  * Hỗ trợ trạng thái Còn hàng / Hết hàng, placeholder ảnh 1:1, định dạng tiền VND và xem chi tiết món.
+ * Tối ưu hóa hiệu năng render với React.memo, xử lý fallback ảnh lỗi chống CLS.
  */
-export const MenuItemPreviewCard: React.FC<MenuItemPreviewCardProps> = ({
+const MenuItemPreviewCardComponent: React.FC<MenuItemPreviewCardProps> = ({
   item,
   onItemClick,
   onAddClick,
   canAddToCart = false,
   className = '',
 }) => {
+  const [imageError, setImageError] = useState(false);
   const isAvailable = item.available;
 
   // Định dạng tiền tệ VND chuẩn tiếng Việt (ví dụ: 35.000 đ)
@@ -53,14 +55,16 @@ export const MenuItemPreviewCard: React.FC<MenuItemPreviewCardProps> = ({
       } ${className}`}
       aria-label={`${item.name}, giá ${formattedPrice}, ${isAvailable ? 'còn hàng' : 'hết hàng'}`}
     >
-      {/* Khung ảnh 1:1 tỉ lệ vuông bo góc 12px */}
+      {/* Khung ảnh 1:1 tỉ lệ vuông cố định bo góc 12px chống CLS */}
       <div className="relative flex-shrink-0 w-20 h-20 rounded-xl bg-[#F7F8F7] border border-[#E9ECEA] overflow-hidden flex items-center justify-center">
-        {item.imageUrl ? (
+        {item.imageUrl && !imageError ? (
           <Image
             src={item.imageUrl}
             alt={item.name}
             width={80}
             height={80}
+            loading="lazy"
+            onError={() => setImageError(true)}
             className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
             unoptimized
           />
@@ -154,4 +158,7 @@ export const MenuItemPreviewCard: React.FC<MenuItemPreviewCardProps> = ({
     </article>
   );
 };
+
+export const MenuItemPreviewCard = React.memo(MenuItemPreviewCardComponent);
+
 

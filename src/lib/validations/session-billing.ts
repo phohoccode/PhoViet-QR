@@ -12,10 +12,12 @@ export const settleSessionInput = z.discriminatedUnion("action", [
   z.strictObject({ ...command, action: z.literal("confirm_received"), expectedBillVersion: billVersion,
     paymentMethod: z.enum(["cash", "bank_transfer"]), receivedConfirmed: z.literal(true) }),
 ]) satisfies z.ZodType<SettleSessionInput>;
-export const guestBillQuery = z.strictObject({ qrCode: publicQrCode });
+export const guestBillQuery = z.strictObject({ qrCode: publicQrCode, sessionId: resourceId.optional() });
 const money = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const timestamp = z.iso.datetime({ offset: true });
 export const tableBillResponse = z.strictObject({
+  kind: z.literal('paid_receipt').optional(), receiptId: resourceId.optional(),
+  receiptVersion: version.optional(), currency: z.literal('VND').optional(),
   table: z.strictObject({ id: resourceId, label: z.string().min(1).max(80) }),
   session: z.strictObject({ id: resourceId, status: z.enum(["open", "checkout_pending", "closed"]),
     openedAt: timestamp, closedAt: timestamp.nullable(), orderCount: z.number().int().nonnegative(),
@@ -32,7 +34,10 @@ export const tableBillResponse = z.strictObject({
     (bill.session.status === "closed") !== (bill.session.closedAt !== null) ||
     (bill.session.paymentStatus === "paid") !== (bill.settledAt !== null && bill.paymentMethod !== null) ||
     (bill.canSettle && (bill.session.status !== "checkout_pending" || bill.outstandingOrders !== 0 || bill.session.paymentStatus === "paid")) ||
-    (bill.canAcceptMoreOrders && bill.session.status !== "open")) {
+    (bill.canAcceptMoreOrders && bill.session.status !== "open") ||
+    ([bill.kind, bill.receiptId, bill.receiptVersion, bill.currency].some(v => v !== undefined) &&
+      (bill.kind !== 'paid_receipt' || !bill.receiptId || !bill.receiptVersion || bill.currency !== 'VND' ||
+       bill.session.status !== 'closed' || bill.session.paymentStatus !== 'paid' || bill.canAcceptMoreOrders || bill.canSettle))) {
     ctx.addIssue({ code: "custom", message: "Inconsistent session bill" });
   }
 }).transform(bill => bill as TableBillView);

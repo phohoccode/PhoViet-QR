@@ -370,6 +370,8 @@ Errors use standard envelope:400 VALIDATION_ERROR,401 UNAUTHORIZED,403 FORBIDDEN
 
 ## R13 — POST /api/owner/table-sessions/:id/settle
 
+**P5-HF01 amendment:** successful settlement also atomically creates an immutable final receipt and separate read-only guest capability. Guest bill GET transitions to that receipt after close; ordering remains revoked. Historical read routes, TTL, errors and private polling contract are in [P5_CLOSED_SESSION_RECEIPTS.md](P5_CLOSED_SESSION_RECEIPTS.md).
+
 **P5-C01 implemented amendment:** see [P5_SESSION_BILLING.md](P5_SESSION_BILLING.md) for actual GET bill routes, required `expectedBillVersion`, `receivedConfirmed:true`, strict input, `SessionSettlementResult.bill`, financial revision and explicit blockers. The request examples below describe the older draft and must not be sent unchanged.
 
 O; path session; `SettleSessionInput` tagged union required requestId + action + expectedVersion. `action=begin_checkout`: open→checkout_pending, lock session chặn order mới, trả bill snapshot; `cancel_checkout`: checkout_pending→open nếu chưa settlement success; `confirm_received`: chỉ checkout_pending và mọi non-cancelled order completed theo ASSUMPTION Q6, required `paymentMethod:cash|bank_transfer`. Không nhận totalVnd client, không guest set paid. UI luôn begin trước confirm, không direct open→confirm. Tính bill từ snapshots, settlement success+close+revoke+version changes/audit/outbox cùng transaction; một success/phiên. Không thu tiền qua takeaway provider.
@@ -501,6 +503,8 @@ Trước: R04 order-T pending, intent-T pending, ticket=null. Verified event E1/
 | 500 | INTERNAL_ERROR | Lỗi đã sanitize; chưa biết commit thì retry **cùng key** rồi refetch |
 
 Các status 410 được giữ từ P0-C01 ngoài danh sách status tối thiểu của prompt, lý do/changelog ở Review. Error details allowlist types.ts, không stack/SQL/raw provider/secret. Ví dụ failure đầy đủ:
+
+P6-C02 additive admission/settings and private menu revalidation contract: [P6_ORDERING_ADMISSION.md](./P6_ORDERING_ADMISSION.md). It reuses `STORE_NOT_ACCEPTING_ORDERS` (409) and `RATE_LIMITED` (429).
 
 <!-- contract: ApiFailure -->
 ```json

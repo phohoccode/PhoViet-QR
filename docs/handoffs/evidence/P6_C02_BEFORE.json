@@ -1,0 +1,211 @@
+{
+  "phase": "before",
+  "commit": "b0d60a868cec53db7245c27242893bed29b38978",
+  "dirtyWorktree": true,
+  "environment": "Loopback Docker PostgreSQL/PostgREST + Next production HTTP; 200 menu items, 1000 options; burst concurrency, not sustained load",
+  "provider": "TEST ONLY signatures validated by production parser; no provider network/charge; checkout via PostgREST seam to avoid provisioning network",
+  "measurements": [
+    {
+      "label": "qr-resolve",
+      "concurrency": 50,
+      "requests": 50,
+      "durationMs": 502,
+      "rps": 100,
+      "p50Ms": 462,
+      "p95Ms": 492,
+      "p99Ms": 493,
+      "statusCounts": {
+        "200": 50
+      },
+      "errorCodes": {},
+      "bytes": 12450
+    },
+    {
+      "label": "menu-read",
+      "concurrency": 50,
+      "requests": 50,
+      "durationMs": 457,
+      "rps": 109,
+      "p50Ms": 363,
+      "p95Ms": 435,
+      "p99Ms": 452,
+      "statusCounts": {
+        "200": 50
+      },
+      "errorCodes": {},
+      "bytes": 7545048
+    },
+    {
+      "label": "qr-resolve",
+      "concurrency": 100,
+      "requests": 100,
+      "durationMs": 510,
+      "rps": 196,
+      "p50Ms": 367,
+      "p95Ms": 495,
+      "p99Ms": 499,
+      "statusCounts": {
+        "200": 100
+      },
+      "errorCodes": {},
+      "bytes": 24900
+    },
+    {
+      "label": "menu-read",
+      "concurrency": 100,
+      "requests": 100,
+      "durationMs": 991,
+      "rps": 101,
+      "p50Ms": 822,
+      "p95Ms": 969,
+      "p99Ms": 979,
+      "statusCounts": {
+        "200": 100
+      },
+      "errorCodes": {},
+      "bytes": 15090091
+    },
+    {
+      "label": "qr-resolve",
+      "concurrency": 200,
+      "requests": 200,
+      "durationMs": 822,
+      "rps": 243,
+      "p50Ms": 687,
+      "p95Ms": 793,
+      "p99Ms": 796,
+      "statusCounts": {
+        "200": 200
+      },
+      "errorCodes": {},
+      "bytes": 49800
+    },
+    {
+      "label": "menu-read",
+      "concurrency": 200,
+      "requests": 200,
+      "durationMs": 1725,
+      "rps": 116,
+      "p50Ms": 1445,
+      "p95Ms": 1689,
+      "p99Ms": 1708,
+      "statusCounts": {
+        "200": 200
+      },
+      "errorCodes": {},
+      "bytes": 30180186
+    },
+    {
+      "label": "takeaway-checkout-postgrest",
+      "concurrency": 50,
+      "requests": 50,
+      "durationMs": 359,
+      "rps": 139,
+      "p50Ms": 238,
+      "p95Ms": 347,
+      "p99Ms": 357,
+      "statusCounts": {
+        "201": 50
+      },
+      "errorCodes": {},
+      "bytes": 0
+    },
+    {
+      "label": "signed-test-webhooks",
+      "concurrency": 50,
+      "requests": 50,
+      "durationMs": 1134,
+      "rps": 44,
+      "p50Ms": 1033,
+      "p95Ms": 1124,
+      "p99Ms": 1132,
+      "statusCounts": {
+        "200": 50
+      },
+      "errorCodes": {},
+      "bytes": 1500
+    },
+    {
+      "label": "duplicate-signed-webhooks",
+      "concurrency": 50,
+      "requests": 50,
+      "durationMs": 661,
+      "rps": 76,
+      "p50Ms": 561,
+      "p95Ms": 650,
+      "p99Ms": 657,
+      "statusCounts": {
+        "200": 50
+      },
+      "errorCodes": {},
+      "bytes": 1500
+    },
+    {
+      "label": "private-pickup-tracking",
+      "concurrency": 50,
+      "requests": 50,
+      "durationMs": 427,
+      "rps": 117,
+      "p50Ms": 400,
+      "p95Ms": 421,
+      "p99Ms": 422,
+      "statusCounts": {
+        "200": 50
+      },
+      "errorCodes": {},
+      "bytes": 59151
+    }
+  ],
+  "counts": {
+    "orders": 50,
+    "payments": 50,
+    "tickets": 50,
+    "pickup": 50,
+    "failedInbox": 0
+  },
+  "crossBuyer": "404",
+  "baselineMenuExplain": [
+    {
+      "Plan": {
+        "Node Type": "Result",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 0,
+        "Total Cost": 0.26,
+        "Plan Rows": 1,
+        "Plan Width": 32,
+        "Actual Startup Time": 13.184,
+        "Actual Total Time": 13.185,
+        "Actual Rows": 1,
+        "Actual Loops": 1,
+        "Shared Hit Blocks": 1605,
+        "Shared Read Blocks": 0,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0
+      },
+      "Planning": {
+        "Shared Hit Blocks": 0,
+        "Shared Read Blocks": 0,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0
+      },
+      "Planning Time": 0.025,
+      "Triggers": [],
+      "Execution Time": 13.245
+    }
+  ],
+  "filtersAndCart": "client-only operations; no separate backend endpoint",
+  "status": "PASS"
+}

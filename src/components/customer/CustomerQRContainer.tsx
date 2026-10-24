@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChefHat, ChevronRight, CheckCircle2, Bell, AlertCircle } from 'lucide-react';
 import type { QRResolution, MenuCategory, MenuItem, OrderDetail } from '../../../docs/contracts/types';
+import type { OrderAdmissionView } from '../shared/admission-types';
 import { CustomerOrderModeHeader } from './CustomerOrderModeHeader';
 import { TableVerificationCard } from './TableVerificationCard';
 import { QRResolutionStateView, type QRResolutionUiState } from './QRResolutionStateView';
@@ -98,21 +99,27 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
   const isDineIn = resolution?.type === 'table';
   const isTableVerified = Boolean(isDineIn && !resolution?.requiresSessionCode);
 
+  const initialSessionId = isDineIn
+    ? (resolution?.session?.id ?? activeOrder?.sessionId)
+    : undefined;
+
   const customerBillState = useCustomerTableBill({
     qrCode,
-    enabled: Boolean(isDineIn && isTableVerified),
+    sessionId: initialSessionId,
+    enabled: Boolean(isDineIn),
     refetchIntervalMs: 8000,
   });
 
   const isSessionClosed = Boolean(
     isDineIn &&
-    (customerBillState.bill?.session.status === 'closed' ||
+    (customerBillState.isPaid ||
+      customerBillState.bill?.session.status === 'closed' ||
       customerBillState.bill?.session.paymentStatus === 'paid' ||
       Boolean(customerBillState.bill?.settledAt))
   );
 
   const currentSessionId = isDineIn
-    ? (resolution?.session?.id ?? customerBillState.bill?.session.id)
+    ? (resolution?.session?.id ?? customerBillState.bill?.session.id ?? activeOrder?.sessionId)
     : undefined;
 
   const isOrderFromPastSession = Boolean(
@@ -328,6 +335,12 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
     (resolution.session?.status === 'checkout_pending' ||
       customerBillState.bill?.session.status === 'checkout_pending');
 
+  const admissionView: OrderAdmissionView = {
+    type: isTakeaway ? 'takeaway' : 'dine_in',
+    acceptingOrders: resolution.store.acceptingOrders !== false,
+    reason: 'manual_pause',
+  };
+
   return (
     <div
       className={`min-h-screen bg-[#F5F6F5] text-[#1D2522] flex flex-col justify-between ${className}`}
@@ -353,9 +366,9 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         />
 
         {/* =================================================================
-            2. Khối Nhập Mã Phiên Bàn (Chỉ hiển thị cho QR Bàn Chưa Xác Nhận)
+            2. Khối Nhập Mã Phiên Bàn (Chỉ hiển thị cho QR Bàn Chưa Xác Nhận & Chưa Đóng)
            ================================================================= */}
-        {isDineIn && isTableUnverified && (
+        {isDineIn && isTableUnverified && !isSessionClosed && (
           <div className="px-4 pt-3 pb-1">
             <TableVerificationCard
               tableLabel={tableLabel || 'Bàn'}
@@ -405,17 +418,17 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         {/* Cảnh báo bàn đã đóng phiên */}
         {isSessionClosed && (
           <div className="px-4 pt-2">
-            <div className="p-3.5 rounded-2xl bg-[#F0F2F1] border border-[#E9ECEA] flex items-start gap-3 shadow-xs animate-dialog-card-in">
-              <CheckCircle2 className="w-5 h-5 text-[#1D725E] flex-shrink-0 mt-0.5" />
+            <div className="p-3.5 rounded-2xl bg-[#ECFDF3] border border-[#ABEFC6] flex items-start gap-3 shadow-xs animate-dialog-card-in">
+              <CheckCircle2 className="w-5 h-5 text-[#027A48] flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-[#1D2522]">Phiên bàn đã kết thúc</p>
-                <p className="text-xs text-[#55605C] mt-0.5 leading-relaxed">
-                  Hóa đơn đã được thanh toán và phiên bàn đã đóng. Vui lòng liên hệ quán nếu quý khách cần phục vụ thêm.
+                <p className="text-xs font-bold text-[#027A48]">Thanh toán hoàn tất</p>
+                <p className="text-xs text-[#05603A] mt-0.5 leading-relaxed">
+                  Hóa đơn đã được thanh toán thành công. Cảm ơn quý khách đã sử dụng dịch vụ!
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsBillSheetOpen(true)}
-                  className="mt-2.5 px-3 py-1.5 rounded-lg bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold transition-colors shadow-xs"
+                  className="mt-2.5 px-3 py-1.5 rounded-lg bg-[#027A48] hover:bg-[#05603A] text-white text-xs font-bold transition-colors shadow-xs"
                 >
                   Xem hóa đơn đã thanh toán →
                 </button>
@@ -512,12 +525,12 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         <div className="pt-2">
           {isSessionClosed ? (
             <div className="px-4 py-8 text-center space-y-3">
-              <div className="w-14 h-14 rounded-2xl bg-[#F0F2F1] text-[#727B77] mx-auto flex items-center justify-center">
-                <CheckCircle2 className="w-7 h-7 text-[#1D725E]" />
+              <div className="w-14 h-14 rounded-2xl bg-[#ECFDF3] border border-[#ABEFC6] text-[#027A48] mx-auto flex items-center justify-center shadow-xs">
+                <CheckCircle2 className="w-7 h-7 text-[#027A48]" />
               </div>
-              <h3 className="text-base font-bold text-[#1D2522]">Phiên bàn đã kết thúc</h3>
-              <p className="text-xs text-[#727B77] max-w-xs mx-auto leading-relaxed">
-                Hóa đơn đã được thanh toán và phiên bàn đã đóng. Vui lòng liên hệ quán nếu quý khách cần phục vụ thêm!
+              <h3 className="text-base font-bold text-[#1D2522]">Thanh toán thành công</h3>
+              <p className="text-xs text-[#55605C] max-w-xs mx-auto leading-relaxed">
+                Hóa đơn đã được thanh toán và phiên bàn đã đóng. Cảm ơn quý khách và hẹn gặp lại!
               </p>
               <button
                 type="button"
@@ -533,6 +546,7 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
               items={menuItems}
               isTableVerified={isTableVerified && !isCheckoutPending}
               isTakeaway={isTakeaway}
+              admission={admissionView}
               isLoading={isMenuLoading}
               isMockPreview={false}
               errorMessage={menuErrorMessage}
@@ -562,7 +576,7 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         item={selectedItemForDetail}
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
-        canAddToCart={!isCheckoutPending && !isSessionClosed}
+        canAddToCart={!isCheckoutPending && !isSessionClosed && admissionView.acceptingOrders}
         isTableVerified={isTableVerified}
         isTakeaway={isTakeaway}
         onSelectItem={handleSelectItem}
@@ -577,6 +591,7 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         cartState={cartState}
         cartActions={cartActions}
         readiness={readiness}
+        admission={admissionView}
         isTakeaway={isTakeaway}
         tableLabel={tableLabel || 'Bàn'}
         storeName={resolution.store.name}
@@ -602,7 +617,7 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
       />
 
       {/* =================================================================
-          7. Khung Xem Hóa Đơn Bàn & Lượt Gọi Món (P5-G01 / P5-G02)
+          7. Khung Xem Hóa Đơn Bàn & Lượt Gọi Món (P5-G01 / P5-G02 / P5-HF01)
          ================================================================= */}
       <TableBillSheet
         isOpen={isBillSheetOpen}
@@ -611,9 +626,11 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
         isLoading={customerBillState.isLoading}
         isStale={customerBillState.isStale}
         errorMessage={customerBillState.errorMessage}
+        errorCode={customerBillState.errorCode}
         isBlockedByApi={customerBillState.isBlockedByApi}
         onRefresh={customerBillState.refetch}
         tableLabel={tableLabel || 'Bàn'}
+        storeName={resolution?.store.name}
         onOrderMore={() => {
           setIsBillSheetOpen(false);
         }}

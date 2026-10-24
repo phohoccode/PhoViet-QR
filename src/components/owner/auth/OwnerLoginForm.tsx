@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useId } from 'react';
-import { Mail, Lock, Eye, EyeOff, Store, AlertCircle, Loader2, Info } from 'lucide-react';
+import Image from 'next/image';
+import { Mail, Lock, Eye, EyeOff, AlertCircle, Loader2, Info } from 'lucide-react';
 
 import type { OwnerLoginActionState } from '@/features/owner/auth-actions';
 export type { OwnerLoginActionState };
@@ -106,8 +107,15 @@ export const OwnerLoginForm: React.FC<OwnerLoginFormProps> = ({
     >
       {/* 1. Brand Logo & Tiêu đề */}
       <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-[#E8F4F0] text-[#1D725E] mb-3 shadow-xs">
-          <Store className="w-6 h-6" aria-hidden="true" />
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#E8F4F0] overflow-hidden text-[#1D725E] mb-3 shadow-xs">
+          <Image
+            src="/brand/logo.png"
+            alt="Phở Việt Logo"
+            width={56}
+            height={56}
+            className="w-full h-full object-cover"
+            priority
+          />
         </div>
         <h1 className="text-xl sm:text-2xl font-bold text-[#1D2522] tracking-tight">
           Đăng nhập quản lý

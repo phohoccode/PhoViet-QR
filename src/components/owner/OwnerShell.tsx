@@ -13,6 +13,7 @@ import { OwnerMenuView } from "./menu/OwnerMenuView";
 import { TableManagementView } from "./tables/TableManagementView";
 import { TakeawayQrCard } from "./settings/TakeawayQrCard";
 import { VietQrPaymentSettingsCard } from "./settings/VietQrPaymentSettingsCard";
+import { StoreAdmissionControlCard } from "./settings/StoreAdmissionControlCard";
 import { OwnerOrdersView } from "./orders/OwnerOrdersView";
 
 export type OwnerTabState = "ready" | "loading" | "empty" | "error";
@@ -255,31 +256,12 @@ export const OwnerShell: React.FC<OwnerShellProps> = ({
              ================================================================= */}
           {activeTab === "settings" && (
             <div className="flex-1 max-w-3xl mx-auto w-full py-4 space-y-4">
-              <div className="p-4 bg-white rounded-2xl border border-[#E9ECEA] shadow-xs">
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className="text-sm font-bold text-[#1D2522]">
-                    1. Trạng thái nhận đơn của quán
-                  </h4>
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#E8F4F0] text-[#1D725E] border border-[#C6E7DC]">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        acceptingOrders !== false
-                          ? "bg-[#1D725E] animate-pulse"
-                          : "bg-[#B42318]"
-                      }`}
-                    />
-                    <span className="whitespace-nowrap">
-                      {acceptingOrders !== false
-                        ? "Đang hoạt động"
-                        : "Tạm ngừng"}
-                    </span>
-                  </span>
-                </div>
-                <p className="text-xs text-[#727B77] mb-3">
-                  Quán đang mở cửa tiếp nhận đơn hàng tại bàn và mua mang đi qua
-                  mã QR. Khách hàng quét mã có thể xem thực đơn và gửi đơn.
-                </p>
-              </div>
+              {/* CARD 1: Điều khiển trạng thái tiếp nhận đơn hàng quán (P6-G02) */}
+              <StoreAdmissionControlCard
+                masterAccepting={acceptingOrders !== false}
+                dineInAccepting={acceptingOrders !== false}
+                takeawayAccepting={acceptingOrders !== false}
+              />
 
               {/* CARD 2: QR Mua mang đi tại quầy (P2-G04, lọc chính xác mã active chưa thu hồi theo UI-01) */}
               <TakeawayQrCard

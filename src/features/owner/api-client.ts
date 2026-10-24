@@ -1,4 +1,4 @@
-import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput, OpenTableSessionInput, OwnerSessionOpenedView } from "@contracts";
+import type { OwnerMenuView, OwnerMenuItem, OwnerMenuCategory, CreateMenuItemInput, PatchMenuItemInput, CreateMenuCategoryInput, PatchMenuCategoryInput, OpenTableSessionInput, OwnerSessionOpenedView, OrderingSettingsView, PatchOrderingSettingsInput } from "@contracts";
 import { menuRequest } from "@/features/customer/api-client";
 import type { OwnerTablePinView, RotateTablePinInput } from "@contracts";
 import type { TableBillView, SettleSessionInput, SessionSettlementResult } from "@contracts";
@@ -30,3 +30,6 @@ export const markOrderReady = (id: string, input: OrderTransitionInput): Promise
 export const completeOrder = (id: string, input: CompleteOrderInput): Promise<OrderDetail> => menuRequest(`/api/owner/orders/${encodeURIComponent(id)}/complete`, "POST", input);
 export const fetchOwnerSessionBill = (id: string): Promise<TableBillView> => menuRequest(`/api/owner/table-sessions/${encodeURIComponent(id)}/bill`);
 export const settleOwnerSession = (id: string, input: SettleSessionInput): Promise<SessionSettlementResult> => menuRequest(`/api/owner/table-sessions/${encodeURIComponent(id)}/settle`, "POST", input);
+export const fetchOrderingSettings = (): Promise<OrderingSettingsView> => menuRequest("/api/owner/settings/ordering");
+export const patchOrderingSettings = (input: PatchOrderingSettingsInput): Promise<OrderingSettingsView> => menuRequest("/api/owner/settings/ordering", "PATCH", input);
+

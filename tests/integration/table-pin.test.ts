@@ -147,12 +147,13 @@ it("multi-instance durable device/IP/table burst limits preserve shared-WiFi acc
   await expect(verifyTableSession(t.code, opened.sessionCredential.sessionCode, attacker)).rejects.toMatchObject({ code: "RATE_LIMITED" });
   expect((await verifyTableSession(t.code, opened.sessionCredential.sessionCode, browser())).requiresSessionCode).toBe(false);
   expect((await verifyTableSession(t2.code, otherPin.sessionCredential.sessionCode, { ...attacker, browserHash: browser().browserHash })).requiresSessionCode).toBe(false);
-  // A new cookie per guess still hits source+QR and then aggregate QR limits.
+  // Failed guesses charge the source/QR; correct users on shared Wi-Fi bypass
+  // these aggregate failure counters. The failed device remains locked above.
   for (let i = 0; i < 3; i++) await expect(verifyTableSession(t.code, wrong(opened.sessionCredential.sessionCode), browser())).rejects.toMatchObject({ code: "INVALID_SESSION_CODE" });
-  await expect(verifyTableSession(t.code, opened.sessionCredential.sessionCode, browser())).rejects.toMatchObject({ code: "RATE_LIMITED" });
+  expect((await verifyTableSession(t.code, opened.sessionCredential.sessionCode, browser())).requiresSessionCode).toBe(false);
   const qrId = sql(`select id from public.qr_codes where public_code='${t.code}'`);
   sql(`update public.security_rate_buckets set attempts=20 where key_hash=encode(extensions.digest('pin-table-burst:${qrId}','sha256'),'hex')`);
-  await expect(verifyTableSession(t.code, opened.sessionCredential.sessionCode, { ...browser(), ipHash: hashSecret("different-source") })).rejects.toMatchObject({ code: "RATE_LIMITED", details: { retryAfterSeconds: expect.any(Number) } });
+  await expect(verifyTableSession(t.code, wrong(opened.sessionCredential.sessionCode), { ...browser(), ipHash: hashSecret("different-source") })).rejects.toMatchObject({ code: "RATE_LIMITED", details: { retryAfterSeconds: expect.any(Number) } });
 });
 
 it("owner scope/RPC grants isolate PIN secrets and reveal/rotate deny checkout, expired and closed sessions", async () => {

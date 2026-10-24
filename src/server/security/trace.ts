@@ -9,14 +9,14 @@ export function traceEvent(event: "api.internal_failure" | "payment.provision_pe
   if (event === "api.internal_failure") console.error(entry);
   else console.warn(entry);
 }
-export async function withApiTrace<T extends Response>(request: Request, action: () => Promise<T>): Promise<T> {
+export async function withApiTrace<T extends Response>(request: Request, action: () => Promise<T>, operation?: 'public.menu' | 'owner.ordering'): Promise<T> {
   // Never trust or reflect an inbound X-Request-Id (may contain secrets or log injection).
   const correlationId = randomUUID(), started = performance.now();
   return context.run({ correlationId }, async () => {
     const response = await action();
     response.headers.set("X-Request-Id", correlationId);
     console.info(JSON.stringify({ event: "api.request", correlationId, method: request.method,
-      status: response.status, durationMs: Math.round(performance.now() - started) }));
+      status: response.status, durationMs: Math.round(performance.now() - started), ...(operation ? { operation } : {}) }));
     return response;
   });
 }

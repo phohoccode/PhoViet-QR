@@ -1,0 +1,9 @@
+{
+  "environment": "disposable local PostgreSQL; independent service_role connections",
+  "correctPinSharedWifi": {
+    "clients": 50,
+    "successes": 50
+  },
+  "failedDeviceBlocked": true,
+  "provider": "NOT_USED: DB-only admission/ACL/MVCC tests; signed HTTP callbacks measured separately"
+}

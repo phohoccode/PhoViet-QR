@@ -37,6 +37,7 @@ import { PreCheckoutReview } from "./PreCheckoutReview";
 import { EditCartItemDialog } from "./EditCartItemDialog";
 import { useDineInCheckout } from "../order/useDineInCheckout";
 import type { OrderDetail } from "../../../../docs/contracts/types";
+import type { OrderAdmissionView, SubmitAvailability } from "../../shared/admission-types";
 import {
   type ActiveOrderSummary,
   getOrderStatusBadgeConfig,
@@ -51,6 +52,8 @@ interface CartSheetProps {
   cartState: CustomerCartState;
   cartActions: CustomerCartActions;
   readiness: CartReadiness;
+  admission?: OrderAdmissionView;
+  submitAvailability?: SubmitAvailability;
   isTakeaway?: boolean;
   tableLabel?: string;
   storeName?: string;
@@ -74,6 +77,8 @@ export const CartSheet: React.FC<CartSheetProps> = ({
   cartState,
   cartActions,
   readiness,
+  admission,
+  submitAvailability,
   isTakeaway = false,
   tableLabel = "Bàn",
   storeName,
@@ -220,6 +225,8 @@ export const CartSheet: React.FC<CartSheetProps> = ({
             qrCode={qrCode}
             isTableVerified={isTableVerified}
             readiness={readiness}
+            admission={admission}
+            submitAvailability={submitAvailability}
             cartActions={cartActions}
             checkout={checkout}
             onBackToCart={() => setCurrentStep("cart")}

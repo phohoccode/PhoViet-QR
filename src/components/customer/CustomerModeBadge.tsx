@@ -39,7 +39,7 @@ export const CustomerModeBadge: React.FC<CustomerModeBadgeProps> = ({
       aria-label="Ngữ cảnh gọi món: Mua mang đi"
     >
       <ShoppingBag className="w-3.5 h-3.5" aria-hidden="true" />
-      <span>Mang đi</span>
+      <span className='whitespace-nowrap'>Mang đi</span>
     </span>
   );
 };

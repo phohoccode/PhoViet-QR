@@ -7,8 +7,8 @@
   "successes": 100,
   "errors": 0,
   "applicationRetries": 0,
-  "durationMs": 1164,
-  "p50Ms": 772,
-  "p95Ms": 1143,
+  "durationMs": 1005,
+  "p50Ms": 762,
+  "p95Ms": 981,
   "failedInbox": 0
 }

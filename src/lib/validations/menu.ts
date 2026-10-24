@@ -36,7 +36,9 @@ const optionView = z.strictObject({ id: resourceId, name: menuName, priceDeltaVn
 const categoryView = z.strictObject({ id: resourceId, name: menuName, sortOrder: categoryFields.sortOrder });
 const itemView = z.strictObject({ id: resourceId, categoryId: resourceId, name: menuName, description: fields.description,
   priceVnd: moneyVnd, imageUrl: menuImageUrl, available: z.boolean(), options: z.array(optionView), updatedAt: timestamp });
-export const publicMenuResponse = z.strictObject({ categories: z.array(categoryView), items: z.array(itemView), menuRevision: z.string().min(1).max(128), serverTime: timestamp }) satisfies z.ZodType<MenuV1View>;
+export const publicMenuResponse = z.strictObject({ categories: z.array(categoryView), items: z.array(itemView), menuRevision: z.string().min(1).max(128), serverTime: timestamp,
+  orderingAvailability: z.strictObject({ orderType: z.enum(['dine_in', 'takeaway']), acceptingOrders: z.boolean(), reason: z.literal('manual_pause').optional() }).optional(),
+}) satisfies z.ZodType<MenuV1View>;
 export const ownerMenuItemResponse = itemView.extend({ active: z.boolean() }) satisfies z.ZodType<OwnerMenuItem>;
 export const ownerCategoryResponse = categoryView.extend({ active: z.boolean(), updatedAt: timestamp }) satisfies z.ZodType<OwnerMenuCategory>;
 export const ownerMenuResponse = publicMenuResponse.extend({ categories: z.array(categoryView.extend({ active: z.boolean() })), items: z.array(ownerMenuItemResponse) }) satisfies z.ZodType<OwnerMenuView>;

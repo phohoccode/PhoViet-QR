@@ -17,6 +17,9 @@ const messages: Partial<Record<ApiErrorCode, string>> = {
   SESSION_REQUIRED: "Vui lòng xác minh mã phiên bàn.",
   SESSION_EXPIRED: "Phiên bàn hoặc quyền truy cập đã hết hiệu lực.",
   SESSION_CHECKOUT_PENDING: "Bàn đang thanh toán, chưa thể đặt thêm món.",
+  RECEIPT_NOT_READY: "Biên lai chưa sẵn sàng. Vui lòng thử lại sau.",
+  RECEIPT_ACCESS_DENIED: "Bạn không có quyền xem biên lai này.",
+  RECEIPT_EXPIRED: "Quyền xem biên lai đã hết hạn.",
   INVALID_SESSION_CODE: "Mã phiên không hợp lệ.",
   INVALID_STATE_TRANSITION: "Bàn không hoạt động hoặc đã có phiên đang mở.",
   RESOURCE_NOT_FOUND: "Không tìm thấy tài nguyên.",
@@ -34,6 +37,7 @@ const statuses: Partial<Record<ApiErrorCode, number>> = {
   PAYMENT_PROVIDER_UNAVAILABLE: 503, PAYMENT_REVIEW_REQUIRED: 409,
   INVALID_QR: 404, RESOURCE_NOT_FOUND: 404, SESSION_REQUIRED: 403, SESSION_EXPIRED: 410,
   SESSION_CHECKOUT_PENDING: 409, INVALID_SESSION_CODE: 422, INVALID_STATE_TRANSITION: 409,
+  RECEIPT_NOT_READY: 409, RECEIPT_ACCESS_DENIED: 403, RECEIPT_EXPIRED: 410,
   UNAUTHORIZED: 401, FORBIDDEN: 403, VALIDATION_ERROR: 400, DUPLICATE_REQUEST_CONFLICT: 409,
   RATE_LIMITED: 429, INTERNAL_ERROR: 500,
 };

@@ -1,0 +1,244 @@
+{
+  "scope": "loopback PostgreSQL + Supabase Auth + Next production HTTP",
+  "checks": 67,
+  "status": "PASS",
+  "orders": 4,
+  "successfulSettlements": 1,
+  "totalVnd": 248000,
+  "recovery": [
+    "429 with Retry-After and zero ledger",
+    "500 with full rollback",
+    "same-key retry after recovery",
+    "commit response ignored; GET/refetch and exact retry"
+  ],
+  "paidReceiptResponse": {
+    "data": {
+      "kind": "paid_receipt",
+      "receiptId": "798aeae3-33bd-4d4b-a282-dc162c50ef7e",
+      "receiptVersion": 5,
+      "currency": "VND",
+      "table": {
+        "id": "342a6e0b-ede1-4f47-96fb-9ea701290916",
+        "label": "Bill table"
+      },
+      "session": {
+        "id": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+        "status": "closed",
+        "openedAt": "2026-10-24T07:06:03.213086+00:00",
+        "closedAt": "2026-10-24T07:06:05.764595+00:00",
+        "orderCount": 4,
+        "totalVnd": 248000,
+        "paymentStatus": "paid",
+        "version": 5,
+        "pinState": "expired"
+      },
+      "orders": [
+        {
+          "id": "09ec5db4-d5cb-4927-ae4d-f126879d4a9e",
+          "storeId": "2f044b10-5aad-4b23-8072-e1eceba10d07",
+          "type": "dine_in",
+          "tableSessionId": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+          "table": {
+            "id": "342a6e0b-ede1-4f47-96fb-9ea701290916",
+            "label": "Bill table"
+          },
+          "ticketNo": 1,
+          "serviceDate": "2026-10-24",
+          "acceptedAt": "2026-10-24T07:06:03.543314+00:00",
+          "paymentStatus": "paid",
+          "totalVnd": 62000,
+          "itemCount": 2,
+          "createdAt": "2026-10-24T07:06:03.543314+00:00",
+          "updatedAt": "2026-10-24T07:06:04.336356+00:00",
+          "version": 4,
+          "lines": [
+            {
+              "id": "0a5a6cc1-b086-48d4-b5eb-b7dca9a764bf",
+              "menuItemId": "e624cbc7-fc2b-4750-aad4-d84c693b8656",
+              "name": "Snapshot",
+              "baseUnitPriceVnd": 31000,
+              "options": [],
+              "unitPriceVnd": 31000,
+              "quantity": 2,
+              "lineTotalVnd": 62000,
+              "note": null
+            }
+          ],
+          "note": null,
+          "payment": {
+            "kind": "table_session",
+            "tableSessionId": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+            "intentId": null,
+            "intentStatus": null,
+            "status": "paid",
+            "statusLabel": "Đã thanh toán",
+            "amountVnd": 62000,
+            "currency": "VND",
+            "updatedAt": "2026-10-24T07:06:04.336356+00:00",
+            "reconciliationRequired": false
+          },
+          "status": "completed",
+          "statusLabel": "Đã giao",
+          "fulfillmentStatus": "served"
+        },
+        {
+          "id": "5d8fc0ab-7966-4147-a84d-b5fa27807b92",
+          "storeId": "2f044b10-5aad-4b23-8072-e1eceba10d07",
+          "type": "dine_in",
+          "tableSessionId": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+          "table": {
+            "id": "342a6e0b-ede1-4f47-96fb-9ea701290916",
+            "label": "Bill table"
+          },
+          "ticketNo": 2,
+          "serviceDate": "2026-10-24",
+          "acceptedAt": "2026-10-24T07:06:03.672462+00:00",
+          "paymentStatus": "paid",
+          "totalVnd": 62000,
+          "itemCount": 2,
+          "createdAt": "2026-10-24T07:06:03.672462+00:00",
+          "updatedAt": "2026-10-24T07:06:04.397206+00:00",
+          "version": 4,
+          "lines": [
+            {
+              "id": "265c5363-8527-4fcf-83fb-201c1e007d3a",
+              "menuItemId": "e624cbc7-fc2b-4750-aad4-d84c693b8656",
+              "name": "Snapshot",
+              "baseUnitPriceVnd": 31000,
+              "options": [],
+              "unitPriceVnd": 31000,
+              "quantity": 2,
+              "lineTotalVnd": 62000,
+              "note": null
+            }
+          ],
+          "note": null,
+          "payment": {
+            "kind": "table_session",
+            "tableSessionId": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+            "intentId": null,
+            "intentStatus": null,
+            "status": "paid",
+            "statusLabel": "Đã thanh toán",
+            "amountVnd": 62000,
+            "currency": "VND",
+            "updatedAt": "2026-10-24T07:06:04.397206+00:00",
+            "reconciliationRequired": false
+          },
+          "status": "completed",
+          "statusLabel": "Đã giao",
+          "fulfillmentStatus": "served"
+        },
+        {
+          "id": "963c650f-f3db-4a62-b697-985963af024b",
+          "storeId": "2f044b10-5aad-4b23-8072-e1eceba10d07",
+          "type": "dine_in",
+          "tableSessionId": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+          "table": {
+            "id": "342a6e0b-ede1-4f47-96fb-9ea701290916",
+            "label": "Bill table"
+          },
+          "ticketNo": 3,
+          "serviceDate": "2026-10-24",
+          "acceptedAt": "2026-10-24T07:06:03.806283+00:00",
+          "paymentStatus": "paid",
+          "totalVnd": 62000,
+          "itemCount": 2,
+          "createdAt": "2026-10-24T07:06:03.806283+00:00",
+          "updatedAt": "2026-10-24T07:06:04.457888+00:00",
+          "version": 4,
+          "lines": [
+            {
+              "id": "15fe48f7-6cf2-4df5-a42d-b2205ea41b6f",
+              "menuItemId": "e624cbc7-fc2b-4750-aad4-d84c693b8656",
+              "name": "Snapshot",
+              "baseUnitPriceVnd": 31000,
+              "options": [],
+              "unitPriceVnd": 31000,
+              "quantity": 2,
+              "lineTotalVnd": 62000,
+              "note": null
+            }
+          ],
+          "note": null,
+          "payment": {
+            "kind": "table_session",
+            "tableSessionId": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+            "intentId": null,
+            "intentStatus": null,
+            "status": "paid",
+            "statusLabel": "Đã thanh toán",
+            "amountVnd": 62000,
+            "currency": "VND",
+            "updatedAt": "2026-10-24T07:06:04.457888+00:00",
+            "reconciliationRequired": false
+          },
+          "status": "completed",
+          "statusLabel": "Đã giao",
+          "fulfillmentStatus": "served"
+        },
+        {
+          "id": "72d1958c-b4bd-48b0-86ac-a86f70db07c8",
+          "storeId": "2f044b10-5aad-4b23-8072-e1eceba10d07",
+          "type": "dine_in",
+          "tableSessionId": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+          "table": {
+            "id": "342a6e0b-ede1-4f47-96fb-9ea701290916",
+            "label": "Bill table"
+          },
+          "ticketNo": 4,
+          "serviceDate": "2026-10-24",
+          "acceptedAt": "2026-10-24T07:06:04.21026+00:00",
+          "paymentStatus": "paid",
+          "totalVnd": 62000,
+          "itemCount": 2,
+          "createdAt": "2026-10-24T07:06:04.21026+00:00",
+          "updatedAt": "2026-10-24T07:06:04.523127+00:00",
+          "version": 4,
+          "lines": [
+            {
+              "id": "362f9820-d178-436f-8a7a-22a7c6722ea8",
+              "menuItemId": "e624cbc7-fc2b-4750-aad4-d84c693b8656",
+              "name": "Snapshot",
+              "baseUnitPriceVnd": 31000,
+              "options": [],
+              "unitPriceVnd": 31000,
+              "quantity": 2,
+              "lineTotalVnd": 62000,
+              "note": null
+            }
+          ],
+          "note": null,
+          "payment": {
+            "kind": "table_session",
+            "tableSessionId": "fd2668e0-16f0-4dc0-8099-a05a352d8ad2",
+            "intentId": null,
+            "intentStatus": null,
+            "status": "paid",
+            "statusLabel": "Đã thanh toán",
+            "amountVnd": 62000,
+            "currency": "VND",
+            "updatedAt": "2026-10-24T07:06:04.523127+00:00",
+            "reconciliationRequired": false
+          },
+          "status": "completed",
+          "statusLabel": "Đã giao",
+          "fulfillmentStatus": "served"
+        }
+      ],
+      "totalVnd": 248000,
+      "billVersion": "81d641678356cac2786bd59f91c63e81",
+      "outstandingOrders": 0,
+      "canAcceptMoreOrders": false,
+      "canSettle": false,
+      "settledAt": "2026-10-24T07:06:05.763027+00:00",
+      "paymentMethod": "bank_transfer"
+    },
+    "error": null
+  },
+  "isolatedReopen": true,
+  "twoPinVerifiedDevices": true,
+  "realtimePublisher": "absent; private outbox + authenticated GET reconciliation verified",
+  "providerNetwork": "NOT_CALLED",
+  "browserE2E": "NOT_RUN"
+}

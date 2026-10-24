@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import Home from '@/app/page';
@@ -8,6 +8,11 @@ import { OrderingOptionsSection } from '@/components/home/OrderingOptionsSection
 import { HomeBenefitsSection } from '@/components/home/HomeBenefitsSection';
 import { HowItWorksSection } from '@/components/home/HowItWorksSection';
 import { HomeFooter } from '@/components/home/HomeFooter';
+
+vi.mock('next/font/google', () => ({
+  Be_Vietnam_Pro: () => ({ variable: '--font-sans' }),
+}));
+
 
 describe('UI Hotfix 01 — Public Homepage Friendly Copy Tests', () => {
   it('1. Trang chủ không còn hiển thị thông báo tạm thời "Ứng dụng đang được chuẩn bị."', () => {
@@ -94,4 +99,20 @@ describe('UI Hotfix 01 — Public Homepage Friendly Copy Tests', () => {
     expect(html).toContain('id="benefits"');
     expect(html).toContain('id="how-it-works"');
   });
+
+  it('9. Root Layout metadata & viewport tích hợp đầy đủ bộ nhận diện thương hiệu Phở Việt', async () => {
+    const { metadata: layoutMetadata, viewport: layoutViewport } = await import('@/app/layout');
+    expect(layoutMetadata.title).toBe('Phở Việt | Đặt món bằng QR');
+    expect(layoutMetadata.description).toBe('Quét QR, xem thực đơn và đặt món nhanh chóng tại Phở Việt.');
+    expect(layoutMetadata.manifest).toBe('/site.webmanifest');
+    expect(layoutMetadata.icons).toBeDefined();
+    expect(JSON.stringify(layoutMetadata.icons)).toContain('favicon.ico');
+    expect(JSON.stringify(layoutMetadata.icons)).toContain('/icons/apple-touch-icon.png');
+    expect(JSON.stringify(layoutMetadata.icons)).toContain('/icons/icon-512.png');
+    expect(layoutMetadata.openGraph?.images).toEqual([
+      { url: '/social/share-1200x630.png', width: 1200, height: 630, alt: 'Phở Việt – Đặt món bằng QR' },
+    ]);
+    expect(layoutViewport.themeColor).toBe('#35977d');
+  });
 });
+

@@ -931,7 +931,7 @@ export const TableBillSettlementSheet: React.FC<OwnerTableBillSettlementProps> =
                       rel="noopener noreferrer"
                       className="px-3 h-8 rounded-xl bg-[#F7F8F7] hover:bg-[#E9ECEA] text-xs font-semibold text-[#1D2522] flex items-center gap-1.5 transition-colors"
                     >
-                      <span>Xem QR</span>
+                      <span className='whitespace-nowrap'>Xem QR</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </div>

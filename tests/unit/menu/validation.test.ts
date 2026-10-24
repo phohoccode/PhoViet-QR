@@ -39,10 +39,10 @@ it("validates category/query input and preserves false query semantics", () => {
   expect(publicMenuQuery.safeParse({qrCode:"abc",storeId:randomUUID()}).success).toBe(false);
   expect(createCategoryInput.safeParse({requestId:randomUUID(),name:"a",sortOrder:0.5,active:true}).success).toBe(false);
 });
-it("adapters use credentialed no-store requests and preserve caller command IDs", async () => {
+it("menu revalidates the private HTTP cache; mutations preserve caller command IDs", async () => {
   const mocked=vi.fn().mockImplementation(async()=>new Response(JSON.stringify({data:{items:[]},error:null})));vi.stubGlobal("fetch",mocked);
   await fetchPublicMenu("A_B");
-  expect(mocked).toHaveBeenLastCalledWith("/api/public/menu?qrCode=A_B",expect.objectContaining({credentials:"include",cache:"no-store"}));
+  expect(mocked).toHaveBeenLastCalledWith("/api/public/menu?qrCode=A_B",expect.objectContaining({credentials:"include",cache:"no-cache"}));
   await createCategory({requestId:item.requestId,name:"Coffee",sortOrder:1,active:true});
   expect(JSON.parse(mocked.mock.calls.at(-1)![1].body).requestId).toBe(item.requestId);
   await updateMenuItem(item.categoryId,{requestId:item.requestId,expectedUpdatedAt:"2026-10-23T00:00:00Z",priceVnd:0});

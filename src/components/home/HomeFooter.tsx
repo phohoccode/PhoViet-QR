@@ -2,7 +2,8 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { QrCode, LogIn } from 'lucide-react';
+import Image from 'next/image';
+import { LogIn } from 'lucide-react';
 
 export const HomeFooter: React.FC = () => {
   return (
@@ -11,8 +12,14 @@ export const HomeFooter: React.FC = () => {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 pb-8 border-b border-[#F0F2F1]">
           {/* Logo & Tên hệ thống */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#1D725E] flex items-center justify-center text-white shadow-xs">
-              <QrCode className="w-5 h-5" aria-hidden="true" />
+            <div className="w-9 h-9 rounded-xl bg-[#1D725E] overflow-hidden flex items-center justify-center text-white shadow-xs">
+              <Image
+                src="/brand/logo.png"
+                alt="Phở Việt Logo"
+                width={36}
+                height={36}
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <span className="font-bold text-base text-[#1D2522] tracking-tight block leading-tight">

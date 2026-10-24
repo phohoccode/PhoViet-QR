@@ -18,7 +18,7 @@ it("pickup tracking uses the order ID, guest cookie, no cache and a 15-second ab
   }
 });
 
-it("uses credentialed no-store requests without retrying or changing command keys/timestamps", async () => {
+it("revalidates public menu only; private reads and commands remain no-store without automatic retry", async () => {
   const transport = vi.fn(async () => Response.json({ data: { sentinel: true }, error: null }));
   vi.stubGlobal("fetch", transport);
   const requestId = "c0500000-0000-4000-8000-000000000001";
@@ -33,7 +33,7 @@ it("uses credentialed no-store requests without retrying or changing command key
     "/api/public/qr/CODE%20A", "/api/public/menu?qrCode=CODE%20A", "/api/public/table-sessions/verify",
     "/api/owner/tables/table%2Fpath/sessions", "/api/owner/qr-codes/qr%2Fpath/rotate", "/api/owner/qr-codes/qr%2Fpath/rotate", "/api/owner/tables/table%2Fpath",
   ]);
-  for (const [, init] of calls) { expect(init?.credentials).toBe("include"); expect(init?.cache).toBe("no-store"); }
+  for (const [url, init] of calls) { expect(init?.credentials).toBe("include"); expect(init?.cache).toBe(String(url).startsWith('/api/public/menu?') ? "no-cache" : "no-store"); }
   expect(calls[4][1]?.body).toBe(calls[5][1]?.body);
   expect(JSON.parse(String(calls[4][1]?.body))).toEqual({ requestId, expectedUpdatedAt: timestamp, confirm: true });
   expect(JSON.parse(String(calls[2][1]?.body))).toEqual({ qrCode: "CODE", sessionCode: "TRANSIENT_TEST_CODE" });

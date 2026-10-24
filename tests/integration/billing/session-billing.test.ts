@@ -2,7 +2,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { createDineInOrder, getGuestOrder } from "../../../src/server/orders/service";
-import { getOwnerSessionBill, getGuestSessionBill, settleSession } from "../../../src/server/table-sessions/billing";
+import { getOwnerSessionBill, getGuestSessionBill, getGuestSessionReceipt, getOwnerSessionReceipt, settleSession } from "../../../src/server/table-sessions/billing";
 import { claimNextOrder, markOwnerOrderReady, completeOwnerOrder, getOwnerOrders } from "../../../src/server/orders/owner-service";
 import { hashSecret } from "../../../src/server/security/crypto";
 import { paymentRpc } from "../../../src/server/payments/database";
@@ -61,6 +61,9 @@ afterAll(() => {
     union all select encode(extensions.digest('order-read:'||d.h||':'||o.id,'sha256'),'hex') from public.orders o cross join unnest(array['${f.devices.map(d => d.browserHash).join("','")}']::text[]) d(h) where o.store_id='${f.store}');
    delete from public.outbox_events where aggregate_id in(select id from public.table_sessions where store_id='${f.store}')
     or aggregate_id in(select id from public.orders where store_id='${f.store}') or aggregate_id in(select id from public.payment_intents where store_id='${f.store}');
+   delete from public.session_receipt_read_audit where browser_hash in('${f.devices.map(d => d.browserHash).join("','")}');
+   delete from public.session_receipt_access where store_id='${f.store}';delete from public.session_receipts where store_id='${f.store}';
+   delete from public.security_rate_buckets where key_hash in(select encode(extensions.digest('receipt-read:'||h,'sha256'),'hex') from unnest(array['${f.devices.map(d => d.browserHash).join("','")}']::text[]) d(h));
    delete from public.session_settlement_audit_log where store_id='${f.store}';delete from public.session_settlements where store_id='${f.store}';delete from public.session_checkout_snapshots where store_id='${f.store}';
    delete from public.operation_requests where store_id='${f.store}';delete from public.order_events where store_id='${f.store}';delete from public.order_requests where store_id='${f.store}';
    delete from public.payments where store_id='${f.store}';delete from public.payment_webhook_inbox where event->>'reference' in(select provider_reference from public.payment_intents where store_id='${f.store}');
@@ -98,6 +101,114 @@ it("three guests add three immutable tickets; 20 retries share one order; option
   expect(bill).toMatchObject({ outstandingOrders: 3, canAcceptMoreOrders: true, canSettle: false });
   expect(await getGuestSessionBill(f.code, guests[0])).toEqual(bill);
   expect(f.count("orders")).toBe(3); expect(f.count("order_requests")).toBe(3);
+});
+
+it('HF01 two established devices keep exactly one immutable final receipt across reload/reopen; new device is isolated', async () => {
+  const f=fixture(), a=f.device(), b=f.device();
+  const orders=await Promise.all([createDineInOrder(f.command(),a),createDineInOrder(f.command(),b)]);
+  // A cancelled ticket stays visible but contributes no payable value.
+  sql(`update public.orders set status='cancelled' where id='${orders[1].id}';update public.orders set status='completed' where id='${orders[0].id}'`);
+  const prepared=await f.begin();
+  await expect(getGuestSessionReceipt(f.session,a)).rejects.toMatchObject({code:'RECEIPT_NOT_READY'});
+  expect((await getGuestSessionBill(f.code,b)).session.status).toBe('checkout_pending');
+  const command=f.confirm(prepared.bill,{paymentMethod:'bank_transfer'});
+  await Promise.all([settleSession(f.owner,f.session,command),settleSession(f.owner,f.session,command)]);
+  const r=await getGuestSessionReceipt(f.session,a);
+  expect(r).toMatchObject({kind:'paid_receipt',currency:'VND',receiptVersion:3,paymentMethod:'bank_transfer',totalVnd:96000,
+    session:{status:'closed',paymentStatus:'paid'},canAcceptMoreOrders:false,canSettle:false});
+  expect(r.settledAt).toBeTruthy(); expect(r.orders).toHaveLength(2);
+  expect(r.orders.map(o=>o.ticketNo)).toEqual([1,2]);
+  expect(await getGuestSessionReceipt(f.session,{...a})).toEqual(r);
+  expect(await getGuestSessionBill(f.code,b,f.session)).toEqual(r);
+  expect(await getOwnerSessionReceipt(f.owner,f.session)).toEqual(r);
+  sql(`update public.dining_tables set label='Renamed physical table' where id='${f.table}';update public.menu_items set name='Changed menu',price_vnd=50000 where id='${f.item}'`);
+  expect(await getGuestSessionReceipt(f.session,b)).toEqual(r);
+  sql(`update public.qr_codes set active=false where public_code='${f.code}'`);
+  expect(await getGuestSessionBill(f.code,a,f.session)).toEqual(r);
+  sql(`update public.qr_codes set active=true where public_code='${f.code}'`);
+  expect(()=>sql(`set role service_role;update public.session_receipts set bill='{}' where table_session_id='${f.session}'`)).toThrow();
+  expect(()=>sql(`update public.session_receipts set bill='{}' where table_session_id='${f.session}'`)).toThrow();
+  await expect(createDineInOrder(f.command(),a)).rejects.toMatchObject({code:'SESSION_EXPIRED'});
+  const fresh=randomUUID();
+  sql(`insert into public.table_sessions(id,store_id,table_id,code_hash,code_expires_at) values('${fresh}','${f.store}','${f.table}','${'c'.repeat(64)}',clock_timestamp()+interval '24 hours')`);
+  const c=f.device(); // fixture's default grant intentionally scopes the OLD session
+  sql(`delete from public.guest_access where browser_context_hash='${c.browserHash}';insert into public.guest_access(store_id,scope_id,token_hash,browser_context_hash,expires_at)
+   values('${f.store}','${fresh}','${hashSecret(`${c.grantProof}:${fresh}`)}','${c.browserHash}',clock_timestamp()+interval '6 hours')`);
+  expect((await getGuestSessionBill(f.code,c)).session.id).toBe(fresh);
+  expect(await getGuestSessionBill(f.code,a)).toEqual(r);
+  await expect(getGuestSessionReceipt(f.session,c)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+  await expect(getGuestSessionBill(f.code,a,fresh)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+  const foreign=fixture();
+  await expect(getGuestSessionBill(foreign.code,a,f.session)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+  await expect(getOwnerSessionReceipt(foreign.owner,f.session)).rejects.toMatchObject({code:'RESOURCE_NOT_FOUND'});
+  expect(f.count('session_receipts')).toBe(1); expect(f.count('session_settlements')).toBe(1);
+  expect(sql(`select count(*) from public.outbox_events where aggregate_id='${f.session}' and topic='table_session.receipt_ready'`)).toBe('1');
+  const event=JSON.parse(sql(`select payload from public.outbox_events where aggregate_id='${f.session}' and topic='table_session.receipt_ready'`));
+  expect(event).toMatchObject({receiptVersion:r.receiptVersion,receiptId:r.receiptId,aggregateId:f.session});
+  expect(Object.keys(event).sort()).toEqual(['aggregateId','eventId','receiptId','receiptVersion','type','version']);
+});
+
+it('HF01 expired/revoked/forged capabilities fail closed and revoked/expired pre-settlement guests never gain receipt access',async()=>{
+  const f=fixture(), a=f.device(), b=f.device(), expired=f.device(), revoked=f.device();
+  sql(`update public.guest_access set revoked_at=clock_timestamp() where browser_context_hash='${revoked.browserHash}';
+   update public.guest_access set expires_at=clock_timestamp()-interval '1 minute' where browser_context_hash='${expired.browserHash}'`);
+  const prepared=await f.begin();await settleSession(f.owner,f.session,f.confirm(prepared.bill));
+  await expect(getGuestSessionReceipt(f.session,expired)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+  await expect(getGuestSessionReceipt(f.session,revoked)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+  await expect(getGuestSessionReceipt(f.session,{...a,grantProof:'d'.repeat(64)})).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+  await expect(getGuestSessionReceipt(randomUUID(),a)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+  sql(`update public.session_receipt_access set revoked_at=clock_timestamp() where browser_context_hash='${a.browserHash}';
+   update public.session_receipt_access set expires_at=clock_timestamp()-interval '1 second' where browser_context_hash='${b.browserHash}'`);
+  await expect(getGuestSessionReceipt(f.session,a)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+  await expect(getGuestSessionReceipt(f.session,b)).rejects.toMatchObject({code:'RECEIPT_EXPIRED'});
+  await expect(getGuestSessionBill(f.code,b)).rejects.toMatchObject({code:'RECEIPT_EXPIRED'});
+  sql(`update public.guest_browser_contexts set expires_at=clock_timestamp()-interval '1 second' where token_hash='${b.browserHash}'`);
+  await expect(getGuestSessionReceipt(f.session,b)).rejects.toMatchObject({code:'UNAUTHORIZED'});
+  expect(sql(`select count(*) from public.session_receipt_read_audit where requested_session_id='${f.session}' and outcome='denied'`)).toBe('4');
+});
+
+it('HF01 no successful payment means no receipt; pending/cancel preserve ordering policy and read rate limits cover guessed IDs',async()=>{
+  const f=fixture(),a=f.device();const prepared=await f.begin();
+  await expect(getGuestSessionReceipt(f.session,a)).rejects.toMatchObject({code:'RECEIPT_NOT_READY'});
+  await expect(createDineInOrder(f.command(),a)).rejects.toMatchObject({code:'SESSION_CHECKOUT_PENDING'});
+  await settleSession(f.owner,f.session,{action:'cancel_checkout',requestId:randomUUID(),expectedVersion:prepared.bill.session.version});
+  await createDineInOrder(f.command(),a);
+  expect(f.count('session_receipts')).toBe(0);
+  await expect(getGuestSessionReceipt(f.session,a)).rejects.toMatchObject({code:'RECEIPT_NOT_READY'});
+  sql(`insert into public.security_rate_buckets(key_hash,attempts,resets_at) values('${hashSecret(`receipt-read:${a.browserHash}`)}',60,clock_timestamp()+interval '1 minute')
+   on conflict(key_hash) do update set attempts=60,resets_at=excluded.resets_at`);
+  await expect(getGuestSessionReceipt(randomUUID(),a)).rejects.toMatchObject({code:'RATE_LIMITED',details:{retryAfterSeconds:expect.any(Number)}});
+  for(const relation of ['session_receipts','session_receipt_access','session_receipt_read_audit','session_receipt_policy']) {
+    expect(()=>sql(`set role anon;select * from public.${relation}`)).toThrow();
+    expect(()=>sql(`set role authenticated;select * from public.${relation}`)).toThrow();
+  }
+});
+
+it('HF01 a concurrent explicit revoke wins before capture; settlement lock timeout rolls back and exact retry safely succeeds',async()=>{
+  const f=fixture(),a=f.device();const b=(await f.begin()).bill;
+  const name=`receipt_revoke_${randomUUID().replaceAll('-','')}`;
+  const revoking=concurrent(`set application_name='${name}';begin;update public.guest_access set revoked_at=clock_timestamp() where scope_id='${f.session}';select pg_sleep(0.7);commit;`);
+  for(let n=0;;n++) {
+    if(sql(`select count(*) from pg_stat_activity where application_name='${name}' and wait_event='PgSleep'`)==='1')break;
+    if(n>50)throw Error('Revoke fixture did not lock');await new Promise(r=>setTimeout(r,20));
+  }
+  await settleSession(f.owner,f.session,f.confirm(b));await revoking;
+  expect(f.count('session_receipts')).toBe(1);expect(f.count('session_receipt_access')).toBe(0);
+  await expect(getGuestSessionReceipt(f.session,a)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
+
+  const timeout=fixture(),guest=timeout.device(),prepared=(await timeout.begin()).bill,command=timeout.confirm(prepared);
+  const lockName=`receipt_timeout_${randomUUID().replaceAll('-','')}`;
+  const locking=concurrent(`set application_name='${lockName}';begin;select 1 from public.table_sessions where id='${timeout.session}' for update;select pg_sleep(4.2);commit;`);
+  for(let n=0;;n++) {
+    if(sql(`select count(*) from pg_stat_activity where application_name='${lockName}' and wait_event='PgSleep'`)==='1')break;
+    if(n>50)throw Error('Timeout fixture did not lock');await new Promise(r=>setTimeout(r,20));
+  }
+  await expect(settleSession(timeout.owner,timeout.session,command)).rejects.toMatchObject({code:'INTERNAL_ERROR'});
+  await locking;
+  expect(timeout.count('session_settlements')).toBe(0);expect(timeout.count('session_receipts')).toBe(0);expect(timeout.count('session_receipt_access')).toBe(0);
+  expect(sql(`select revoked_at is null from public.guest_access where scope_id='${timeout.session}'`)).toBe('t');
+  await settleSession(timeout.owner,timeout.session,command);
+  expect((await getGuestSessionReceipt(timeout.session,guest)).session.paymentStatus).toBe('paid');
 });
 
 it("guest scope requires the correct capability/proof; revoked and expired grants cannot read or create", async () => {
@@ -166,11 +277,14 @@ it("20 simultaneous confirmations plus a lost response retry produce one settlem
   await expect(settleSession(f.owner, f.session, { ...input, paymentMethod: "cash" })).rejects.toMatchObject({ code: "DUPLICATE_REQUEST_CONFLICT" });
   await expect(settleSession(f.owner, f.session, f.confirm(prepared.bill))).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
   await expect(settleSession(f.owner, f.session, { action: "cancel_checkout", requestId: randomUUID(), expectedVersion: 3 })).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
-  await expect(getGuestSessionBill(f.code, guest)).rejects.toMatchObject({ code: "SESSION_REQUIRED" });
+  const receipt = await getGuestSessionBill(f.code, guest);
+  expect(receipt).toMatchObject({kind:'paid_receipt',totalVnd:96000,session:{status:'closed',paymentStatus:'paid'}});
+  expect(f.count('session_receipts')).toBe(1);
   await expect(getGuestOrder(order.id, guest)).rejects.toMatchObject({ code: "SESSION_EXPIRED" });
   // The fixed QR now locates a fresh session, but the old capability cannot enter it.
   const fresh = randomUUID(); sql(`insert into public.table_sessions(id,store_id,table_id,code_hash,code_expires_at) values('${fresh}','${f.store}','${f.table}','${"b".repeat(64)}',clock_timestamp()+interval '24 hours')`);
-  await expect(getGuestSessionBill(f.code, guest)).rejects.toMatchObject({ code: "SESSION_REQUIRED" });
+  expect(await getGuestSessionBill(f.code, guest)).toEqual(receipt);
+  await expect(getGuestSessionBill(f.code, guest, fresh)).rejects.toMatchObject({code:'RECEIPT_ACCESS_DENIED'});
   await expect(createDineInOrder(f.command(), guest)).rejects.toMatchObject({ code: "SESSION_REQUIRED" });
 });
 
@@ -335,6 +449,7 @@ it("outbox persistence failure rolls settlement/close/revoke back; retry same ke
   try {
     await expect(settleSession(f.owner, f.session, input)).rejects.toMatchObject({ code: "INTERNAL_ERROR" });
     expect(f.count("session_settlements")).toBe(0); expect((await f.read()).session.status).toBe("checkout_pending");
+    expect(f.count('session_receipts')).toBe(0); expect(f.count('session_receipt_access')).toBe(0);
     expect(sql(`select revoked_at is null from public.guest_access where scope_id='${f.session}'`)).toBe("t");
   } finally { sql(`drop trigger ${name} on public.outbox_events;drop function public.${name}();`); }
   const settled = await settleSession(f.owner, f.session, input);

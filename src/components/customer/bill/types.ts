@@ -3,9 +3,10 @@ import type {
   PaymentMethod,
   TableSessionView,
   OrderDetail,
+  GuestPaidReceipt,
 } from '@contracts';
 
-export type { TableBillView };
+export type { TableBillView, GuestPaidReceipt };
 export type TablePaymentMethod = PaymentMethod;
 export type TableBillSession = TableSessionView;
 export type TableSessionBillingStatus = TableSessionView['status'];

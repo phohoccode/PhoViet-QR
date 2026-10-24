@@ -12,9 +12,10 @@ it("requires explicit received-money confirmation, financial and session version
   expect(settleSessionInput.safeParse({ requestId: randomUUID(), action: "begin_checkout", expectedVersion: 1, expectedBillVersion: "a".repeat(32) }).success).toBe(true);
   expect(settleSessionInput.safeParse({ requestId: randomUUID(), action: "cancel_checkout", expectedVersion: 2 }).success).toBe(true);
 });
-it("guest bill locates only by public QR; session, store and owner substitutions are disallowed", () => {
+it("guest bill locates by public QR; optional historical session selector is still schema-scoped", () => {
   expect(guestBillQuery.safeParse({ qrCode: "TABLE_01" }).success).toBe(true);
-  for (const value of [{}, { qrCode: "a", sessionId: randomUUID() }, { qrCode: "a", storeId: randomUUID() }, { qrCode: "a", token: "secret" }, { qrCode: "../other" }]) expect(guestBillQuery.safeParse(value).success).toBe(false);
+  expect(guestBillQuery.safeParse({ qrCode: "a", sessionId: randomUUID() }).success).toBe(true);
+  for (const value of [{}, { qrCode: "a", storeId: randomUUID() }, { qrCode: "a", token: "secret" }, { qrCode: "../other" }]) expect(guestBillQuery.safeParse(value).success).toBe(false);
 });
 it("billing blockers are explicit 409 no-store errors with actionable messages", async () => {
   for (const code of ["BILL_CHANGED", "SESSION_ORDERS_OUTSTANDING"] as const) {

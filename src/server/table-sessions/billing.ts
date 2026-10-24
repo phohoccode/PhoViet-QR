@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
-import type { ApiErrorCode, SessionSettlementResult, SettleSessionInput, TableBillView } from "@contracts";
+import type { ApiErrorCode, GuestPaidReceipt, SessionSettlementResult, SettleSessionInput, TableBillView } from "@contracts";
 import type { OwnerContext } from "@/server/auth/verify-owner";
 import type { GuestRequestContext } from "@/server/security/request-context";
 import { getClientEnv } from "@/lib/env/client";
@@ -10,7 +10,8 @@ import { guestBillQuery, settleSessionInput, tableBillResponse } from "@/lib/val
 import { ApiFault, validate } from "@/server/security/api";
 
 const known = new Set<ApiErrorCode>(["RESOURCE_NOT_FOUND", "SESSION_REQUIRED", "SESSION_EXPIRED", "UNAUTHORIZED", "FORBIDDEN",
-  "INVALID_STATE_TRANSITION", "DUPLICATE_REQUEST_CONFLICT", "VALIDATION_ERROR", "RATE_LIMITED", "BILL_CHANGED", "SESSION_ORDERS_OUTSTANDING"]);
+  "INVALID_STATE_TRANSITION", "DUPLICATE_REQUEST_CONFLICT", "VALIDATION_ERROR", "RATE_LIMITED", "BILL_CHANGED", "SESSION_ORDERS_OUTSTANDING",
+  "RECEIPT_NOT_READY", "RECEIPT_ACCESS_DENIED", "RECEIPT_EXPIRED"]);
 async function execute<T>(action: string, input: Record<string, unknown>): Promise<T> {
   try {
     const client = createClient(getClientEnv().NEXT_PUBLIC_SUPABASE_URL, getServerEnv().SUPABASE_SERVICE_ROLE_KEY, {
@@ -39,8 +40,19 @@ const scope = (owner: OwnerContext) => ({ storeId: owner.storeId, ownerId: owner
 export async function getOwnerSessionBill(owner: OwnerContext, sessionId: string): Promise<TableBillView> {
   return bill(await execute("owner_bill", { ...scope(owner), sessionId: validate(resourceId, sessionId) }));
 }
-export async function getGuestSessionBill(qrCode: string, context: GuestRequestContext): Promise<TableBillView> {
-  return bill(await execute("guest_bill", { ...validate(guestBillQuery, { qrCode }), browserHash: context.browserHash, grantProof: context.grantProof }));
+export async function getGuestSessionBill(qrCode: string, context: GuestRequestContext, sessionId?: string): Promise<TableBillView> {
+  return bill(await execute("guest_bill", { ...validate(guestBillQuery, { qrCode, sessionId }), browserHash: context.browserHash, grantProof: context.grantProof }));
+}
+function receipt(value: unknown): GuestPaidReceipt {
+  const snapshot = bill(value);
+  if (snapshot.kind !== 'paid_receipt') throw new ApiFault('INTERNAL_ERROR');
+  return snapshot as GuestPaidReceipt;
+}
+export async function getGuestSessionReceipt(sessionId: string, context: GuestRequestContext): Promise<GuestPaidReceipt> {
+  return receipt(await execute('guest_receipt', { sessionId: validate(resourceId, sessionId), browserHash: context.browserHash, grantProof: context.grantProof }));
+}
+export async function getOwnerSessionReceipt(owner: OwnerContext, sessionId: string): Promise<GuestPaidReceipt> {
+  return receipt(await execute('owner_receipt', { ...scope(owner), sessionId: validate(resourceId, sessionId) }));
 }
 export async function settleSession(owner: OwnerContext, sessionId: string, input: SettleSessionInput): Promise<SessionSettlementResult> {
   const command = validate(settleSessionInput, input);

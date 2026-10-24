@@ -1,5 +1,6 @@
 import type {
   TableBillView,
+  GuestPaidReceipt,
   ApiError,
   ApiResponse,
   MenuV1View,
@@ -26,7 +27,9 @@ export async function menuRequest<T>(
   const response = await fetch(path, {
     method,
     credentials: "include",
-    cache: "no-store",
+    // Only public menu representations may use the browser's private HTTP
+    // cache. no-cache always revalidates authorization/revision with the server.
+    cache: method === "GET" && path.startsWith('/api/public/menu?') ? "no-cache" : "no-store",
     ...(signal ? { signal } : {}),
     headers:
       body === undefined
@@ -81,5 +84,7 @@ export const verifyPublicTableSession = (
   input: TableSessionVerifyInput,
 ): Promise<QRResolution> =>
   menuRequest("/api/public/table-sessions/verify", "POST", input);
-export const fetchPublicSessionBill = (qrCode: string): Promise<TableBillView> =>
-  menuRequest(`/api/public/table-sessions/current/bill?qrCode=${encodeURIComponent(qrCode)}`);
+export const fetchPublicSessionBill = (qrCode: string, sessionId?: string, signal?: AbortSignal): Promise<TableBillView> =>
+  menuRequest(`/api/public/table-sessions/current/bill?qrCode=${encodeURIComponent(qrCode)}${sessionId ? `&sessionId=${encodeURIComponent(sessionId)}` : ''}`, 'GET', undefined, signal);
+export const fetchPublicSessionReceipt = (sessionId: string, signal?: AbortSignal): Promise<GuestPaidReceipt> =>
+  menuRequest(`/api/public/table-sessions/${encodeURIComponent(sessionId)}/receipt`, 'GET', undefined, signal);

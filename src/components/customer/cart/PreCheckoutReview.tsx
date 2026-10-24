@@ -16,7 +16,7 @@
  *   + Khi thành công (201), chuyển sang màn hình vé đơn OrderConfirmedView.
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -29,10 +29,12 @@ import {
   Loader2,
   RefreshCw,
   ArrowRight,
+  Clock,
 } from 'lucide-react';
 import type { CustomerCartItem, CartReadiness, CustomerCartActions } from './types';
 import { calculateLineTotalVnd } from './types';
 import type { OrderDetail } from '../../../../docs/contracts/types';
+import type { OrderAdmissionView, SubmitAvailability } from '../../shared/admission-types';
 import { useDineInCheckout, type DineInCheckoutInstance } from '../order/useDineInCheckout';
 import { OrderConfirmedView } from '../order/OrderConfirmedView';
 import { TakeawayPaymentView } from '../payment/TakeawayPaymentView';
@@ -47,6 +49,8 @@ interface PreCheckoutReviewProps {
   qrCode?: string;
   isTableVerified: boolean;
   readiness: CartReadiness;
+  admission?: OrderAdmissionView;
+  submitAvailability?: SubmitAvailability;
   cartActions?: CustomerCartActions;
   checkout?: DineInCheckoutInstance;
   onBackToCart: () => void;
@@ -69,6 +73,8 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
   qrCode = '',
   isTableVerified,
   readiness,
+  admission,
+  submitAvailability,
   cartActions,
   checkout: checkoutProp,
   onBackToCart,
@@ -93,6 +99,60 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
   });
 
   const checkout = checkoutProp || internalCheckout;
+
+  // 1. Kiểm tra trạng thái tạm dừng nhận đơn cho chế độ hiện tại
+  const isPaused = Boolean(
+    (admission && !admission.acceptingOrders && (isTakeaway ? admission.type === 'takeaway' : admission.type === 'dine_in')) ||
+    submitAvailability?.state === 'paused'
+  );
+
+  // 2. Kiểm tra trạng thái giới hạn tần suất (Rate Limiting HTTP 429)
+  const isRateLimited = Boolean(
+    checkout.error?.code === 'RATE_LIMITED' ||
+    submitAvailability?.state === 'rate_limited'
+  );
+  const initialRetryWait =
+    checkout.error?.retryAfterSeconds ??
+    (submitAvailability?.state === 'rate_limited' ? submitAvailability.retryAfterSeconds : undefined) ??
+    0;
+
+  const [countdown, setCountdown] = useState<number>(() => {
+    return isRateLimited && initialRetryWait > 0 ? initialRetryWait : 0;
+  });
+
+  useEffect(() => {
+    if (!isRateLimited || initialRetryWait <= 0) {
+      return;
+    }
+
+    const targetTime = Date.now() + initialRetryWait * 1000;
+    const timer = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
+      setCountdown(remaining);
+      if (remaining <= 0) {
+        clearInterval(timer);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isRateLimited, initialRetryWait]);
+
+  // 3. Kiểm tra thay đổi thực đơn / giá / tình trạng hết hàng
+  const isMenuChanged = Boolean(
+    checkout.error?.code === 'PRICE_CHANGED' ||
+    checkout.error?.code === 'ITEM_UNAVAILABLE' ||
+    checkout.error?.code === 'OUT_OF_STOCK' ||
+    checkout.error?.isMenuError
+  );
+
+  // 4. Kiểm tra hệ thống quá tải / HTTP 503 / STORE_AT_CAPACITY
+  const isOverloaded = Boolean(
+    checkout.error?.code === 'STORE_AT_CAPACITY' ||
+    checkout.error?.code === 'TEMPORARILY_UNAVAILABLE' ||
+    checkout.error?.code === 'PAYMENT_PROVIDER_UNAVAILABLE' ||
+    (checkout.error?.code === 'INTERNAL_ERROR' && checkout.status === 'error') ||
+    submitAvailability?.state === 'unavailable'
+  );
 
   const formattedSubtotal =
     subtotalVnd === null
@@ -151,12 +211,18 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
     isTableVerified &&
     !isCheckoutPending &&
     !isSessionClosed &&
+    !isPaused &&
+    !isMenuChanged &&
+    countdown === 0 &&
     checkout.status !== 'submitting';
 
   const canSubmitTakeaway =
     readiness.canProceedToReview &&
     subtotalVnd !== null &&
     items.length > 0 &&
+    !isPaused &&
+    !isMenuChanged &&
+    countdown === 0 &&
     checkout.status !== 'submitting';
 
   const canSubmit = isTakeaway ? canSubmitTakeaway : canSubmitDineIn;
@@ -285,8 +351,93 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
           </div>
         )}
 
-        {/* Lỗi từ checkout hook */}
-        {checkout.error && (
+        {/* Cảnh báo tạm dừng nhận đơn theo chế độ phục vụ */}
+        {isPaused && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="p-3.5 rounded-xl bg-[#FEF6EE] border border-[#F9DBAF] flex items-start gap-2.5 text-xs text-[#8A4D00]"
+          >
+            <AlertCircle className="w-4 h-4 text-[#B54708] flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-bold text-[#B54708]">
+                {isTakeaway
+                  ? 'Quán đang tạm dừng nhận đơn mang đi'
+                  : 'Quán đang tạm dừng nhận đơn tại bàn'}
+              </p>
+              <p className="text-[11px] mt-0.5 text-[#8A4D00] leading-relaxed">
+                {admission?.message ||
+                  (submitAvailability?.state === 'paused' ? submitAvailability.message : null) ||
+                  'Hiện tại quán đang tạm ngưng tiếp nhận đơn mới. Quý khách vui lòng kiểm tra lại sau hoặc liên hệ nhân viên.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Cảnh báo quá tải / HTTP 503 / STORE_AT_CAPACITY */}
+        {isOverloaded && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="p-3.5 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] flex items-start gap-2.5 text-xs text-[#B42318]"
+          >
+            <AlertCircle className="w-4 h-4 text-[#D92D20] flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-bold text-[#D92D20]">Hệ thống đang bận</p>
+              <p className="text-[11px] mt-0.5 text-[#B42318] leading-relaxed">
+                Hệ thống đang bận. Vui lòng kiểm tra lại trạng thái đơn trước khi đặt lại. Quán đang đông, thời gian chuẩn bị có thể lâu hơn.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Cảnh báo giới hạn tần suất thao tác (HTTP 429 Rate Limiting) */}
+        {isRateLimited && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="p-3.5 rounded-xl bg-[#FEF6EE] border border-[#F9DBAF] flex items-start gap-2.5 text-xs text-[#8A4D00]"
+          >
+            <Clock className="w-4 h-4 text-[#B54708] flex-shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-bold text-[#B54708]">Bạn thao tác hơi nhanh</p>
+              <p className="text-[11px] mt-0.5 text-[#8A4D00] leading-relaxed">
+                Vui lòng thử lại sau{countdown > 0 ? ` (${countdown} giây)` : ''}.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Cảnh báo thay đổi giá món hoặc tình trạng hết hàng (PRICE_CHANGED / ITEM_UNAVAILABLE) */}
+        {isMenuChanged && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="p-3.5 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] text-xs text-[#B42318] space-y-2"
+          >
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-[#D92D20] flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-bold text-[#D92D20]">Thực đơn đã thay đổi</p>
+                <p className="text-[11px] mt-0.5 text-[#B42318] leading-relaxed">
+                  {checkout.error?.message ||
+                    'Giá món ăn hoặc tình trạng món đã được cập nhật. Vui lòng xem lại giỏ hàng trước khi tiếp tục.'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onBackToCart}
+              className="w-full h-9 rounded-lg bg-[#D92D20] hover:bg-[#B42318] text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+            >
+              <span>Xem lại giỏ hàng</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Lỗi thông thường khác từ checkout hook */}
+        {checkout.error && !isMenuChanged && !isRateLimited && !isOverloaded && (
           <div className="p-3.5 rounded-xl bg-[#FEF3F2] border border-[#FECDCA] text-xs text-[#B42318] space-y-2">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-[#D92D20] flex-shrink-0 mt-0.5" />
@@ -307,28 +458,22 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
                 Nhập lại mã phiên bàn →
               </button>
             )}
-
-            {checkout.error.isMenuError && cartActions?.refresh && (
-              <button
-                type="button"
-                onClick={() => cartActions.refresh?.()}
-                className="text-xs font-bold text-[#D92D20] underline hover:text-[#912018]"
-              >
-                Làm mới thực đơn và kiểm tra giỏ hàng →
-              </button>
-            )}
           </div>
         )}
 
         {/* Trạng thái UNCERTAIN khi mất mạng / timeout */}
         {checkout.status === 'uncertain' && (
-          <div className="p-3.5 rounded-xl bg-[#FEF6EE] border border-[#F9DBAF] text-xs text-[#8A4D00] space-y-2">
+          <div
+            role="status"
+            aria-live="polite"
+            className="p-3.5 rounded-xl bg-[#FEF6EE] border border-[#F9DBAF] text-xs text-[#8A4D00] space-y-2"
+          >
             <div className="flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-[#B54708] flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-bold text-[#B54708]">Kết nối mạng bị gián đoạn</p>
+                <p className="font-bold text-[#B54708]">Đang kiểm tra kết quả đơn hàng</p>
                 <p className="text-[11px] mt-0.5 text-[#8A4D00] leading-relaxed">
-                  Chưa thể xác nhận quán đã nhận đơn hay chưa. Hãy bấm nút dưới đây để kiểm tra lại với đúng mã yêu cầu ban đầu mà không sợ bị gửi trùng đơn.
+                  Chưa thể xác nhận quán đã tiếp nhận đơn hay chưa do gián đoạn kết nối. Hãy bấm nút dưới đây để kiểm tra lại với đúng mã yêu cầu ban đầu (không gửi trùng đơn).
                 </p>
               </div>
             </div>
@@ -336,10 +481,10 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
             <button
               type="button"
               onClick={checkout.retryUncertainOrder}
-              className="w-full h-10 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+              className="w-full h-10 rounded-xl bg-[#1D725E] hover:bg-[#165B4B] text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors shadow-xs"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Kiểm tra lại / Thử lại gửi đơn</span>
+              <span>Kiểm tra lại trạng thái đơn</span>
             </button>
           </div>
         )}
@@ -431,53 +576,76 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
       </div>
 
       {/* =======================================================================
-          5. Khung Hành Động Đáy (Footer CTAs P3-G01)
+          5. Khung Hành Động Đáy (Footer CTAs P3-G01 / P6-G02)
          ======================================================================= */}
       <div className="p-4 bg-white border-t border-[#E9ECEA] space-y-2 flex-shrink-0">
-        {isTakeaway ? (
-          checkout.status === 'submitting' ? (
+        {checkout.status === 'submitting' ? (
+          <button
+            type="button"
+            disabled={true}
+            className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E]/70 text-white flex items-center justify-center gap-2 cursor-wait"
+            aria-label={isTakeaway ? 'Đang tạo mã thanh toán VietQR' : 'Đang gửi đơn đặt món'}
+          >
+            <Loader2 className="w-4 h-4 animate-spin text-white" aria-hidden="true" />
+            <span>{isTakeaway ? 'Đang tạo mã thanh toán VietQR...' : 'Đang gửi đơn...'}</span>
+          </button>
+        ) : checkout.status === 'uncertain' ? (
+          <button
+            type="button"
+            onClick={checkout.retryUncertainOrder}
+            className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E] hover:bg-[#165B4B] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+            aria-label="Kiểm tra lại trạng thái đơn"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Kiểm tra lại trạng thái đơn</span>
+          </button>
+        ) : isMenuChanged ? (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={onBackToCart}
+              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#D92D20] hover:bg-[#B42318] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D92D20]"
+              aria-label="Xem lại giỏ hàng do thực đơn thay đổi"
+            >
+              <span>Xem lại giỏ hàng</span>
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <p className="text-[11px] text-[#D92D20] text-center leading-tight">
+              Giá món hoặc tình trạng món đã thay đổi. Vui lòng duyệt lại giỏ hàng.
+            </p>
+          </div>
+        ) : isPaused ? (
+          <div className="space-y-2">
             <button
               type="button"
               disabled={true}
-              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E]/70 text-white flex items-center justify-center gap-2 cursor-wait"
-              aria-label="Đang tạo mã thanh toán VietQR"
+              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#FAFBFB] text-[#A0A8A5] border border-[#E9ECEA] flex items-center justify-center gap-2 cursor-not-allowed"
+              aria-label="Quán đang tạm dừng nhận đơn"
             >
-              <Loader2 className="w-4 h-4 animate-spin text-white" aria-hidden="true" />
-              <span>Đang tạo mã thanh toán VietQR...</span>
+              <span>Quán đang tạm dừng nhận đơn</span>
             </button>
-          ) : checkout.status === 'uncertain' ? (
+            <p className="text-[11px] text-[#B54708] text-center leading-tight font-medium">
+              {isTakeaway
+                ? 'Quán đang tạm dừng nhận đơn mang đi.'
+                : 'Quán đang tạm dừng nhận đơn tại bàn.'}
+            </p>
+          </div>
+        ) : countdown > 0 ? (
+          <div className="space-y-2">
             <button
               type="button"
-              onClick={checkout.retryUncertainOrder}
-              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E] hover:bg-[#165B4B] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
-              aria-label="Kiểm tra lại đơn đang gửi"
+              disabled={true}
+              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#FAFBFB] text-[#A0A8A5] border border-[#E9ECEA] flex items-center justify-center gap-2 cursor-not-allowed"
+              aria-label={`Vui lòng chờ ${countdown} giây để thử lại`}
             >
-              <RefreshCw className="w-4 h-4" />
-              <span>Kiểm tra lại / Thử lại gửi đơn</span>
+              <Clock className="w-4 h-4 text-[#A0A8A5]" />
+              <span>Vui lòng chờ {countdown}s để thử lại</span>
             </button>
-          ) : (
-            <div className="space-y-2">
-              <button
-                type="button"
-                disabled={!canSubmit}
-                onClick={checkout.submitOrder}
-                className={`w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
-                  !canSubmit
-                    ? 'bg-[#FAFBFB] border border-[#E9ECEA] text-[#A0A8A5] cursor-not-allowed'
-                    : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white'
-                }`}
-                aria-label="Tiếp tục thanh toán VietQR cho đơn mang đi"
-              >
-                <span>Tiếp tục thanh toán VietQR</span>
-                <ArrowRight className="w-4 h-4" aria-hidden="true" />
-              </button>
-
-              <p className="text-[11px] text-[#727B77] text-center leading-tight">
-                Nhấn tiếp tục để nhận mã VietQR thanh toán chính thức trước khi quán bắt đầu chế biến.
-              </p>
-            </div>
-          )
-        ) : !isTableVerified ? (
+            <p className="text-[11px] text-[#8A4D00] text-center leading-tight">
+              Bạn thao tác hơi nhanh. Vui lòng chờ đồng hồ đếm ngược kết thúc để thử lại.
+            </p>
+          </div>
+        ) : !isTakeaway && !isTableVerified ? (
           <div className="space-y-2">
             <button
               type="button"
@@ -488,12 +656,11 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
               <span>Vui lòng nhập mã bàn để đặt món</span>
               <ArrowRight className="w-4 h-4" aria-hidden="true" />
             </button>
-
             <p className="text-[11px] text-[#8A4D00] text-center leading-tight">
               Bàn chưa được xác thực. Bạn cần nhập mã phiên bàn trước khi gửi đơn.
             </p>
           </div>
-        ) : isCheckoutPending ? (
+        ) : !isTakeaway && isCheckoutPending ? (
           <div className="space-y-2">
             <button
               type="button"
@@ -507,7 +674,7 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
               Bàn đang được thanh toán. Bạn không thể gọi thêm món lúc này.
             </p>
           </div>
-        ) : isSessionClosed ? (
+        ) : !isTakeaway && isSessionClosed ? (
           <div className="space-y-2">
             <button
               type="button"
@@ -521,41 +688,43 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
               Hóa đơn đã được thanh toán và phiên bàn đã đóng.
             </p>
           </div>
-        ) : checkout.status === 'submitting' ? (
-          <button
-            type="button"
-            disabled={true}
-            className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E]/70 text-white flex items-center justify-center gap-2 cursor-wait"
-            aria-label="Đang gửi đơn đặt món"
-          >
-            <Loader2 className="w-4 h-4 animate-spin text-white" aria-hidden="true" />
-            <span>Đang gửi đơn...</span>
-          </button>
-        ) : checkout.status === 'uncertain' ? (
-          <button
-            type="button"
-            onClick={checkout.retryUncertainOrder}
-            className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E] hover:bg-[#165B4B] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
-            aria-label="Kiểm tra lại đơn đang gửi"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Kiểm tra lại / Thử lại gửi đơn</span>
-          </button>
+        ) : isTakeaway ? (
+          <div className="space-y-2">
+            <button
+              type="button"
+              disabled={!canSubmit}
+              onClick={checkout.submitOrder}
+              className={`w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
+                !canSubmit
+                  ? 'bg-[#FAFBFB] border border-[#E9ECEA] text-[#A0A8A5] cursor-not-allowed'
+                  : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white'
+              }`}
+              aria-label="Tiếp tục thanh toán VietQR cho đơn mang đi"
+            >
+              <span>Tiếp tục thanh toán VietQR</span>
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </button>
+            <p className="text-[11px] text-[#727B77] text-center leading-tight">
+              Nhấn tiếp tục để nhận mã VietQR thanh toán chính thức trước khi quán bắt đầu chế biến.
+            </p>
+          </div>
         ) : (
-          <button
-            type="button"
-            disabled={!canSubmit}
-            onClick={checkout.submitOrder}
-            className={`w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
-              !canSubmit
-                ? 'bg-[#FAFBFB] border border-[#E9ECEA] text-[#A0A8A5] cursor-not-allowed'
-                : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white'
-            }`}
-            aria-label="Xác nhận đặt món ăn tại bàn"
-          >
-            <span>Xác nhận đặt món</span>
-            <ArrowRight className="w-4 h-4" aria-hidden="true" />
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              disabled={!canSubmit}
+              onClick={checkout.submitOrder}
+              className={`w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
+                !canSubmit
+                  ? 'bg-[#FAFBFB] border border-[#E9ECEA] text-[#A0A8A5] cursor-not-allowed'
+                  : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white'
+              }`}
+              aria-label="Xác nhận đặt món ăn tại bàn"
+            >
+              <span>Xác nhận đặt món</span>
+              <ArrowRight className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </div>
         )}
 
         <button

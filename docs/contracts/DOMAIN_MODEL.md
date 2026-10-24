@@ -61,6 +61,8 @@ Chỉ hai vai trò: guest không login và owner đăng nhập Supabase Auth, g�
 
 P5-C01 implementation amendment: manual dine-in ledger is `session_settlements` with succeeded rows only. Checkout attempts are preserved separately in `session_checkout_snapshots`; lifecycle actions are in `session_settlement_audit_log`. `received_confirmed=true`, actor/time/request, financial snapshot and DB unique success are required. The older conceptual pending/failed settlement model above is superseded by [P5_SESSION_BILLING.md](P5_SESSION_BILLING.md).
 
+P5-HF01 adds immutable `session_receipts` (one per successful settlement/session), `session_receipt_access` (hashed browser/session proof, independent read TTL/revoke), administrator-only `session_receipt_policy` (default48h), and server-only `session_receipt_read_audit`. Closing revokes ordering grants while retaining only independently authorized historical receipt reads. No browser RLS policy is broadened. See [P5_CLOSED_SESSION_RECEIPTS.md](P5_CLOSED_SESSION_RECEIPTS.md).
+
 Ngoài quy tắc camelCase → snake_case một-một cho các trường còn lại, danh sách khác biệt có chủ ý của v0.1 là:
 
 | Domain / DTO | DB / nguồn thật | Giải thích |

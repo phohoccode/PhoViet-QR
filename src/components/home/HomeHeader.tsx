@@ -2,7 +2,8 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { QrCode, LogIn } from 'lucide-react';
+import Image from 'next/image';
+import { LogIn } from 'lucide-react';
 
 export const HomeHeader: React.FC = () => {
   return (
@@ -14,8 +15,15 @@ export const HomeHeader: React.FC = () => {
           className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] rounded-xl p-1 -m-1 transition-transform active:scale-95"
           aria-label="QR Ordering — Trang chủ"
         >
-          <div className="w-9 h-9 rounded-xl bg-[#1D725E] flex items-center justify-center text-white shadow-xs">
-            <QrCode className="w-5 h-5" aria-hidden="true" />
+          <div className="w-9 h-9 rounded-xl bg-[#1D725E] overflow-hidden flex items-center justify-center text-white shadow-xs">
+            <Image
+              src="/brand/logo.png"
+              alt="Phở Việt Logo"
+              width={36}
+              height={36}
+              className="w-full h-full object-cover"
+              priority
+            />
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-base text-[#1D2522] tracking-tight leading-tight">

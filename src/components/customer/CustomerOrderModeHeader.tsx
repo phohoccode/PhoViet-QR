@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Store, ShoppingBag, CheckCircle2, Receipt } from 'lucide-react';
+import Image from 'next/image';
+import { ShoppingBag } from 'lucide-react';
 import type { StoreView, OrderType } from '../../../docs/contracts/types';
 import { CustomerModeBadge } from './CustomerModeBadge';
 
@@ -32,10 +33,6 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
   tableLabel,
   cartItemCount = 0,
   onOpenCart,
-  activeOrderTicket,
-  activeOrderStatus,
-  onTrackOrder,
-  onOpenBill,
   className = '',
 }) => {
   const isDineIn = mode === 'dine_in';
@@ -43,17 +40,21 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
     ? 'Đặt món trực tiếp tại bàn'
     : 'Đặt và thanh toán trước — nhận món tại quầy';
 
-  const isCompleted = activeOrderStatus === 'completed';
-  const isReady = activeOrderStatus === 'ready';
-
   return (
     <header
       className={`sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-[#E9ECEA] px-4 py-3 flex items-center justify-between gap-2 sm:gap-3 ${className}`}
     >
       {/* 1. Logo quán & Tên quán & Badge loại đơn */}
       <div className="flex items-center gap-2.5 min-w-0">
-        <div className="w-10 h-10 rounded-2xl bg-[#E8F4F0] flex items-center justify-center flex-shrink-0 text-[#1D725E] shadow-xs">
-          <Store className="w-5 h-5" aria-hidden="true" />
+        <div className="w-10 h-10 rounded-2xl bg-[#E8F4F0] overflow-hidden flex items-center justify-center flex-shrink-0 text-[#1D725E] shadow-xs">
+          <Image
+            src="/brand/logo.png"
+            alt={store.name}
+            width={40}
+            height={40}
+            className="w-full h-full object-cover"
+            priority
+          />
         </div>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -68,7 +69,7 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
 
       {/* 2. Cụm nút hành động bên phải: Hóa đơn bàn, Đơn đang xử lý & Nút giỏ hàng */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        {/* Nút xem hóa đơn bàn cho khách ăn tại bàn */}
+        {/* Nút xem hóa đơn bàn cho khách ăn tại bàn
         {isDineIn && onOpenBill && (
           <button
             type="button"
@@ -101,7 +102,7 @@ export const CustomerOrderModeHeader: React.FC<CustomerOrderModeHeaderProps> = (
             )}
             <span>#{String(activeOrderTicket).padStart(3, '0')}</span>
           </button>
-        ) : null}
+        ) : null} */}
 
         <button
           type="button"

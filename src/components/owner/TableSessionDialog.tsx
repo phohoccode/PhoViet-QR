@@ -222,7 +222,7 @@ export const TableSessionOpenedDialog: React.FC<TableSessionOpenedDialogProps> =
                   className="px-2.5 py-1 rounded-lg border border-[#E9ECEA] bg-white hover:bg-[#F7F8F7] text-[11px] font-semibold text-[#1D2522] flex items-center gap-1 transition-colors"
                   aria-label="Mở trang đặt món của bàn"
                 >
-                  <span>Xem QR</span>
+                  <span className='whitespace-nowrap'>Xem QR</span>
                   <ExternalLink className="w-3 h-3" aria-hidden="true" />
                 </a>
               </div>

@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { useFormStatus } from 'react-dom';
-import { Store, LogOut, Loader2 } from 'lucide-react';
+import { LogOut, Loader2 } from 'lucide-react';
 import { OwnerHeaderPills, type OwnerTabType } from './OwnerHeaderPills';
 
 interface OwnerHeaderProps {
@@ -66,8 +67,15 @@ export const OwnerHeader: React.FC<OwnerHeaderProps> = ({
       {/* 1. Logo & Tên quán bên trái */}
       <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-10 h-10 rounded-2xl bg-[#E8F4F0] flex items-center justify-center text-[#1D725E] font-bold text-lg shadow-xs flex-shrink-0">
-            <Store className="w-5 h-5" aria-hidden="true" />
+          <div className="w-10 h-10 rounded-2xl bg-[#E8F4F0] overflow-hidden flex items-center justify-center text-[#1D725E] font-bold text-lg shadow-xs flex-shrink-0">
+            <Image
+              src="/brand/logo.png"
+              alt={storeName}
+              width={40}
+              height={40}
+              className="w-full h-full object-cover"
+              priority
+            />
           </div>
           <div className="min-w-0">
             <span className="text-[11px] font-semibold text-[#35977D] uppercase tracking-wider block">

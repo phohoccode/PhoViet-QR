@@ -10,9 +10,9 @@ export async function GET(request: NextRequest) {
     try {
       const context = guestRequestContext(request, false);
       const params = new URL(request.url).searchParams;
-      if ([...params.keys()].length !== 1) throw new ApiFault("VALIDATION_ERROR");
-      const { qrCode } = validate(guestBillQuery, Object.fromEntries(params));
-      const response = apiSuccess(await getGuestSessionBill(qrCode, context));
+      if ([...params.keys()].length !== new Set(params.keys()).size) throw new ApiFault("VALIDATION_ERROR");
+      const { qrCode, sessionId } = validate(guestBillQuery, Object.fromEntries(params));
+      const response = apiSuccess(await getGuestSessionBill(qrCode, context, sessionId));
       response.headers.set("Vary", "Cookie, Origin"); return response;
     } catch (error) { const response = apiFailure(error); response.headers.set("Vary", "Cookie, Origin"); return response; }
   });

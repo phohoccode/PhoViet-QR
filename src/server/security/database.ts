@@ -6,7 +6,7 @@ import { ApiFault } from "./api";
 import type { ApiErrorCode } from "@contracts";
 
 type DbResult<T> = { data: T; error?: string; delivery?: unknown; keyId?: string; expiresAt?: string };
-const knownCodes = new Set<ApiErrorCode>(["INVALID_QR", "SESSION_REQUIRED", "SESSION_EXPIRED", "SESSION_CHECKOUT_PENDING", "INVALID_SESSION_CODE", "INVALID_STATE_TRANSITION", "RESOURCE_NOT_FOUND", "FORBIDDEN", "UNAUTHORIZED", "DUPLICATE_REQUEST_CONFLICT", "RATE_LIMITED"]);
+const knownCodes = new Set<ApiErrorCode>(["INVALID_QR", "SESSION_REQUIRED", "SESSION_EXPIRED", "SESSION_CHECKOUT_PENDING", "INVALID_SESSION_CODE", "INVALID_STATE_TRANSITION", "RESOURCE_NOT_FOUND", "FORBIDDEN", "UNAUTHORIZED", "DUPLICATE_REQUEST_CONFLICT", "RATE_LIMITED", "RECEIPT_NOT_READY", "RECEIPT_ACCESS_DENIED", "RECEIPT_EXPIRED"]);
 export async function executePhase2<T>(action: string, input: Record<string, unknown>): Promise<DbResult<T>> {
   try {
     const env = getClientEnv();

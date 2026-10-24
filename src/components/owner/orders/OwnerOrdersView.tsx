@@ -132,6 +132,10 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
   const loadOrdersRef = useRef<(() => Promise<void>) | null>(null);
 
+  // Bộ nhớ theo dõi ID đơn đã hiển thị để gộp thông báo khi nhiều đơn mới đến (P6-G02)
+  const knownOrderIdsRef = useRef<Set<string>>(new Set(initialOrders.map((o) => o.id)));
+  const hasLoadedOnceRef = useRef<boolean>(initialOrders.length > 0);
+
   const showToast = useCallback((type: 'success' | 'info' | 'error', message: string) => {
     setToast({ type, message });
     setTimeout(() => {
@@ -214,6 +218,23 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         // F04: Bỏ qua kết quả cũ nếu đã có truy vấn mới hơn vượt mặt
         if (fetchGen !== fetchGenerationRef.current) return;
 
+        // Phát hiện và gộp thông báo khi có đợt nhiều đơn mới đến (P6-G02)
+        if (hasLoadedOnceRef.current && data.orders.length > 0) {
+          const freshAccepted = data.orders.filter(
+            (o) => !knownOrderIdsRef.current.has(o.id) && o.status === 'accepted'
+          );
+          if (freshAccepted.length > 1) {
+            showToast('info', `Có ${freshAccepted.length} đơn mới trong hàng đợi.`);
+          } else if (freshAccepted.length === 1) {
+            const ticket = freshAccepted[0].ticketNo
+              ? `#${String(freshAccepted[0].ticketNo).padStart(3, '0')}`
+              : `#${freshAccepted[0].id.slice(0, 6)}`;
+            showToast('info', `Có đơn mới ${ticket} trong hàng đợi.`);
+          }
+        }
+        hasLoadedOnceRef.current = true;
+        data.orders.forEach((o) => knownOrderIdsRef.current.add(o.id));
+
         setOrders(data.orders);
         setCounts(data.counts);
         setNextCursor(data.nextCursor);
@@ -244,6 +265,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
           }
           if (err.status === 429) {
             const waitMs = Math.max(10, err.retryAfterSeconds ?? 15) * 1000;
+            setErrorMessage('Thao tác hơi nhanh. Đang tự động giãn cách cập nhật hàng đợi.');
             if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
             pollTimerRef.current = setTimeout(() => {
               if (document.visibilityState === 'visible' && navigator.onLine) {
@@ -272,7 +294,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         }
       }
     },
-    [buildQuery, selectedOrderId]
+    [buildQuery, selectedOrderId, showToast]
   );
 
   // F05: Tải thêm đơn theo keyset pagination khi có nextCursor
@@ -743,6 +765,27 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
 
           {/* Danh sách đơn cuộn mượt mà */}
           <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 min-h-[300px]">
+            {/* Banner cảnh báo mạng/quá tải không che nút Claim Next FIFO (P6-G02) */}
+            {errorMessage && orders.length > 0 && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="p-3 rounded-xl bg-[#FEF6EE] border border-[#F9DBAF] text-xs text-[#8A4D00] flex items-center justify-between gap-2 shadow-xs"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <AlertTriangle className="w-3.5 h-3.5 text-[#B54708] shrink-0" />
+                  <span className="truncate">{errorMessage}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadOrders(true)}
+                  className="text-[11px] font-bold text-[#B54708] underline shrink-0 hover:text-[#93370D]"
+                >
+                  Thử lại
+                </button>
+              </div>
+            )}
+
             {isLoading ? (
               <OrdersQueueSkeleton />
             ) : errorMessage && orders.length === 0 ? (

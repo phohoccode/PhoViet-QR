@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Search, Coffee, AlertCircle, RefreshCw, X } from 'lucide-react';
 import type { MenuCategory, MenuItem } from '../../../docs/contracts/types';
+import type { OrderAdmissionView } from '../shared/admission-types';
 import { CategoryChips } from './CategoryChips';
 import { MenuItemPreviewCard } from './MenuItemPreviewCard';
 
@@ -14,6 +15,7 @@ interface MenuPreviewSectionProps {
   isLoading?: boolean;
   isMockPreview?: boolean;
   errorMessage?: string | null;
+  admission?: OrderAdmissionView;
   onRetry?: () => void;
   onItemClick?: (item: MenuItem) => void;
   onItemAdd?: (item: MenuItem) => void;
@@ -23,7 +25,7 @@ interface MenuPreviewSectionProps {
 /**
  * Hàm chuẩn hóa loại bỏ dấu tiếng Việt để tìm kiếm không phân biệt hoa/thường và dấu
  */
-function removeVietnameseDiacritics(str: string): string {
+export function removeVietnameseDiacritics(str: string): string {
   return str
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -141,8 +143,9 @@ export const MenuErrorState: React.FC<{ message?: string; onRetry?: () => void }
 };
 
 /**
- * MenuPreviewSection — Vỏ khung xem trước thực đơn chuẩn hóa cho Phase 2 (P2-G01 & P2-G02).
- * Hỗ trợ tìm kiếm tiếng Việt chuẩn hóa, lọc chip danh mục, lọc inactive items, và xem chi tiết món.
+ * MenuPreviewSection — Vỏ khung xem trước thực đơn chuẩn hóa Minimal Emerald.
+ * Hỗ trợ tìm kiếm tiếng Việt chuẩn hóa memoized, lọc chip danh mục, lọc inactive items,
+ * và hiển thị trạng thái tiếp nhận đơn (admission / overload) chính xác từ server.
  */
 export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
   categories,
@@ -151,6 +154,7 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
   isTakeaway = false,
   isLoading = false,
   errorMessage = null,
+  admission,
   onRetry,
   onItemClick,
   onItemAdd,
@@ -161,34 +165,46 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
   );
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  if (isLoading) {
-    return <MenuPreviewSkeleton />;
-  }
+  // 1. Memoize active items (lọc bỏ inactive do server trả dư thừa nếu có)
+  const activeItems = useMemo(() => {
+    return items.filter(
+      (item) => (item as unknown as { active?: boolean }).active !== false
+    );
+  }, [items]);
 
-  if (errorMessage) {
-    return <MenuErrorState message={errorMessage} onRetry={onRetry} />;
-  }
+  // 2. Memoize normalized search query
+  const normalizedQuery = useMemo(() => {
+    return removeVietnameseDiacritics(searchQuery.trim());
+  }, [searchQuery]);
 
-  // 1. Chỉ hiển thị các món đang active (nếu public API lỡ trả inactive do bug, UI lọc bỏ)
-  const activeItems = items.filter(
-    (item) => (item as unknown as { active?: boolean }).active !== false
+  // 3. Memoize filtered items: chỉ tính toán lại khi category, query hoặc items thay đổi
+  const filteredItems = useMemo(() => {
+    if (!normalizedQuery && activeCategoryId === 'cat-all') {
+      return activeItems;
+    }
+
+    return activeItems.filter((item) => {
+      const matchesCategory =
+        activeCategoryId === 'cat-all' || item.categoryId === activeCategoryId;
+
+      if (!matchesCategory) return false;
+      if (!normalizedQuery) return true;
+
+      const normalizedName = removeVietnameseDiacritics(item.name);
+      const normalizedDesc = item.description ? removeVietnameseDiacritics(item.description) : '';
+      return normalizedName.includes(normalizedQuery) || normalizedDesc.includes(normalizedQuery);
+    });
+  }, [activeItems, activeCategoryId, normalizedQuery]);
+
+  // Kiểm tra trạng thái tạm dừng riêng biệt cho từng chế độ:
+  // Takeaway bị dừng thì KHÔNG làm ảnh hưởng Dine-in và ngược lại.
+  const isPausedForMode = Boolean(
+    admission &&
+    !admission.acceptingOrders &&
+    (isTakeaway ? admission.type === 'takeaway' : admission.type === 'dine_in')
   );
 
-  // 2. Lọc món theo danh mục và tìm kiếm chuẩn hóa dấu tiếng Việt
-  const normalizedQuery = removeVietnameseDiacritics(searchQuery.trim());
-  const filteredItems = activeItems.filter((item) => {
-    const matchesCategory =
-      activeCategoryId === 'cat-all' || item.categoryId === activeCategoryId;
-
-    if (!matchesCategory) return false;
-    if (!normalizedQuery) return true;
-
-    const normalizedName = removeVietnameseDiacritics(item.name);
-    const normalizedDesc = item.description ? removeVietnameseDiacritics(item.description) : '';
-    return normalizedName.includes(normalizedQuery) || normalizedDesc.includes(normalizedQuery);
-  });
-
-  const canAddToCart = isTakeaway || isTableVerified;
+  const canAddToCart = (isTakeaway || isTableVerified) && !isPausedForMode;
 
   const handleClearSearch = () => {
     setSearchQuery('');
@@ -198,6 +214,14 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
     setSearchQuery('');
     setActiveCategoryId('cat-all');
   };
+
+  if (isLoading) {
+    return <MenuPreviewSkeleton />;
+  }
+
+  if (errorMessage) {
+    return <MenuErrorState message={errorMessage} onRetry={onRetry} />;
+  }
 
   return (
     <div className={`space-y-3 ${className}`}>
@@ -232,7 +256,7 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
         </div>
       </div>
 
-      {/* 3. Dải chip danh mục cuộn ngang */}
+      {/* 2. Dải chip danh mục cuộn ngang */}
       <div className="py-1">
         <CategoryChips
           categories={categories}
@@ -241,7 +265,33 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
         />
       </div>
 
-      {/* 4. Danh sách thẻ món ăn */}
+      {/* Banner nhẹ thông báo tạm dừng nhận đơn theo đúng chế độ phục vụ */}
+      {isPausedForMode && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mx-4 p-3.5 rounded-2xl bg-[#FEF6EE] border border-[#F9DBAF] flex items-start gap-2.5 shadow-xs"
+        >
+          <AlertCircle className="w-4 h-4 text-[#B54708] flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-[#B54708]">
+              {isTakeaway
+                ? 'Quán đang tạm dừng nhận đơn mang đi'
+                : 'Quán đang tạm dừng nhận đơn tại bàn'}
+            </p>
+            <p className="text-[11px] text-[#8A4D00] mt-0.5 leading-relaxed">
+              {admission?.message ||
+                (admission?.reason === 'capacity'
+                  ? 'Quán đang quá tải đơn, tạm ngưng nhận thêm để đảm bảo chất lượng phục vụ.'
+                  : admission?.reason === 'outside_hours'
+                    ? 'Hiện đã ngoài khung giờ nhận đơn của quán.'
+                    : 'Quý khách vẫn có thể xem trước thực đơn trong lúc chờ quán mở nhận đơn lại.')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Danh sách thẻ món ăn */}
       <main className="px-4 pb-4">
         <div className="flex items-center justify-between py-2">
           <h3 className="text-xs font-bold text-[#727B77] uppercase tracking-wider">
@@ -250,7 +300,7 @@ export const MenuPreviewSection: React.FC<MenuPreviewSectionProps> = ({
           </h3>
           {!canAddToCart && (
             <span className="text-[11px] font-medium text-[#8A4D00] bg-[#FEF6EE] px-2 py-0.5 rounded-md">
-              Chế độ xem trước
+              {isPausedForMode ? 'Tạm dừng nhận đơn' : 'Chế độ xem trước'}
             </span>
           )}
         </div>

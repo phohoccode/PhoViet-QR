@@ -206,6 +206,7 @@ export type ApiErrorCode =
   | 'INVALID_PICKUP_CODE' | 'PICKUP_CREDENTIAL_UNAVAILABLE' | 'PICKUP_NOT_ALLOWED' | 'ORDER_ALREADY_COMPLETED'
   | 'INVALID_STATE_TRANSITION' | 'DUPLICATE_REQUEST_CONFLICT'
   | 'BILL_CHANGED' | 'SESSION_ORDERS_OUTSTANDING'
+  | 'RECEIPT_NOT_READY' | 'RECEIPT_ACCESS_DENIED' | 'RECEIPT_EXPIRED'
   | 'RATE_LIMITED' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'VALIDATION_ERROR'
   | 'STORE_NOT_ACCEPTING_ORDERS' | 'RESOURCE_NOT_FOUND' | 'INTERNAL_ERROR';
 export interface ApiErrorDetails {
@@ -228,6 +229,7 @@ export type ContractVersion = 'v1-draft';
 export interface MenuV1View extends MenuView {
   menuRevision: string; // store-scoped revision, changed atomically on menu edits
   serverTime: IsoTimestamp;
+  orderingAvailability?: OrderingAvailability; // P6: effective state for this QR's order type
 }
 /** v1 requires a revision; the original v0.1 example/input remains available. */
 export interface CreateOrderV1Input extends CreateOrderInput { menuRevision: string }
@@ -286,6 +288,11 @@ export type SettleSessionInput = RequestCommand & (
 );
 /** Server computed financial revision. Fulfillment-only changes do not change billVersion. */
 export interface TableBillView {
+  /** Present only on an immutable final receipt; ordering remains disabled. */
+  kind?: 'paid_receipt';
+  receiptId?: Id;
+  receiptVersion?: number;
+  currency?: 'VND';
   table: TableRef;
   session: TableSessionView;
   orders: Extract<OrderDetail, { type: 'dine_in' }>[];
@@ -296,6 +303,17 @@ export interface TableBillView {
   canSettle: boolean;
   settledAt: IsoTimestamp | null;
   paymentMethod: PaymentMethod | null;
+}
+/** Same bill serialization, with finality metadata. No new bearer credential. */
+export interface GuestPaidReceipt extends TableBillView {
+  kind: 'paid_receipt';
+  receiptId: Id;
+  receiptVersion: number;
+  currency: 'VND';
+  settledAt: IsoTimestamp;
+  paymentMethod: PaymentMethod;
+  canAcceptMoreOrders: false;
+  canSettle: false;
 }
 export interface SettlementView {
   id: Id;
@@ -356,6 +374,27 @@ export interface PatchStoreSettingsInput extends RequestCommand {
   expectedUpdatedAt: IsoTimestamp;
   name?: string;
   acceptingOrders?: boolean;
+}
+/** P6: manual admission only; no invented retry ETA or FIFO reservation. */
+export interface OrderingAvailability {
+  orderType: OrderType;
+  acceptingOrders: boolean;
+  reason?: 'manual_pause';
+}
+export interface OrderingSettingsView {
+  storeId: Id;
+  version: number;
+  acceptingOrders: boolean; // legacy master gate
+  acceptDineIn: boolean;
+  acceptTakeaway: boolean;
+  pausedAt: IsoTimestamp | null;
+  availability: OrderingAvailability[];
+}
+export interface PatchOrderingSettingsInput extends RequestCommand {
+  expectedVersion: number;
+  acceptingOrders?: boolean;
+  acceptDineIn?: boolean;
+  acceptTakeaway?: boolean;
 }
 /** Generic application ACK. Actual provider wire ACK remains an adapter decision. */
 export interface WebhookReceipt {
