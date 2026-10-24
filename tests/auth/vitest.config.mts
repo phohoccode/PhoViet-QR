@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   resolve: { alias: {
+    "@contracts": fileURLToPath(new URL("../../docs/contracts/types.ts", import.meta.url)),
     "@": fileURLToPath(new URL("../../src", import.meta.url)),
     "server-only": fileURLToPath(new URL("./server-only-stub.ts", import.meta.url)),
   } },

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { CreateOrderV1Input, OrderDetail } from "@contracts";
+import { ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, type CreateOrderV1Input, type OrderDetail, type OrderSummary, type TakeawayPaymentViewState } from "@contracts";
 import { publicQrCode, resourceId } from "./table-sessions";
 
 // Same text normalization as the cart; field presence is required on the wire.
@@ -52,3 +52,49 @@ export const dineInOrderResponse = dineInSummaryFields.extend({
       order.lines.some(line => BigInt(line.unitPriceVnd) !== BigInt(line.baseUnitPriceVnd) + line.options.reduce((sum, option) => sum + BigInt(option.priceDeltaVnd), BigInt(0)) || BigInt(line.lineTotalVnd) !== BigInt(line.unitPriceVnd) * BigInt(line.quantity)))
     ctx.addIssue({ code: "custom", message: "Inconsistent order snapshot" });
 }) satisfies z.ZodType<OrderDetail>;
+
+const takeawaySummary = z.object({
+  ...dineInSummaryFields.omit({ type: true, table: true, tableSessionId: true, paymentStatus: true, ticketNo: true, serviceDate: true, acceptedAt: true }).shape,
+  type: z.literal("takeaway"), tableSessionId: z.null(), table: z.null(),
+  paymentReviewRequired: z.boolean().optional(),
+  ticketNo: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).nullable(), serviceDate: z.iso.date().nullable(), acceptedAt: timestamp.nullable(),
+  status: z.enum(["pending_payment", "accepted", "preparing", "ready", "completed", "cancelled", "payment_exception"]),
+  statusLabel: z.string(), paymentStatus: z.enum(["pending", "paid", "expired", "exception"]),
+  fulfillmentStatus: z.enum(["awaiting_preparation", "preparing", "ready", "collected", "cancelled"]),
+}).superRefine((o, ctx) => {
+  const issued = ["accepted", "preparing", "ready", "completed"].includes(o.status);
+  const expectedPayment = issued ? "paid" : o.status === "payment_exception" ? "exception" : o.status === "cancelled" ? "expired" : "pending";
+  const expectedFulfillment = ["pending_payment", "payment_exception", "accepted"].includes(o.status) ? "awaiting_preparation" : o.status === "completed" ? "collected" : o.status;
+  if (o.statusLabel !== ORDER_STATUS_LABELS[o.status] || o.paymentStatus !== expectedPayment || o.fulfillmentStatus !== expectedFulfillment ||
+    (issued ? o.ticketNo === null || o.acceptedAt === null || o.serviceDate === null : o.ticketNo !== null || o.acceptedAt !== null || o.serviceDate !== null)) {
+    ctx.addIssue({ code: "custom", message: "Inconsistent takeaway lifecycle" });
+  }
+});
+const paymentBase = z.object({ kind: z.literal("takeaway"), intentId: id, amountVnd: money, currency: z.literal("VND"),
+  updatedAt: timestamp, expiresAt: timestamp, statusLabel: z.string() });
+export const takeawayPaymentResponse = z.discriminatedUnion("status", [
+  paymentBase.extend({ status: z.literal("pending"), intentStatus: z.literal("pending"), reconciliationRequired: z.literal(false), checkoutUrl: z.url().nullable(), qrPayload: z.string().nullable() }),
+  paymentBase.extend({ status: z.literal("paid"), intentStatus: z.literal("succeeded"), reconciliationRequired: z.boolean() }),
+  paymentBase.extend({ status: z.literal("expired"), intentStatus: z.literal("expired"), reconciliationRequired: z.literal(false) }),
+  paymentBase.extend({ status: z.literal("exception"), intentStatus: z.literal("exception"), reconciliationRequired: z.literal(true) }),
+]).superRefine((p, ctx) => { if (p.statusLabel !== PAYMENT_STATUS_LABELS[p.status]) ctx.addIssue({ code: "custom", message: "Incorrect payment label" }); }).transform(p => p as TakeawayPaymentViewState);
+const takeawayDetail = takeawaySummary.and(z.object({ lines: z.array(lineView).min(1).max(100), note: viewNote, payment: takeawayPaymentResponse })).superRefine((o, ctx) => {
+  if (o.payment.status !== o.paymentStatus || o.payment.amountVnd !== o.totalVnd || o.itemCount !== o.lines.reduce((sum, l) => sum + l.quantity, 0) ||
+    BigInt(o.totalVnd) !== o.lines.reduce((sum, l) => sum + BigInt(l.lineTotalVnd), BigInt(0)) ||
+    o.lines.some(l => BigInt(l.unitPriceVnd) !== BigInt(l.baseUnitPriceVnd) + l.options.reduce((sum, opt) => sum + BigInt(opt.priceDeltaVnd), BigInt(0)) || BigInt(l.lineTotalVnd) !== BigInt(l.unitPriceVnd) * BigInt(l.quantity))) ctx.addIssue({ code: "custom", message: "Inconsistent takeaway snapshot" });
+});
+// Cross-field refinements above enforce the canonical discriminated union.
+export const orderResponse = z.union([dineInOrderResponse, takeawayDetail]).transform(o => o as OrderDetail);
+export const orderSummaryResponse = z.union([dineInOrderSummaryResponse, takeawaySummary]).transform(o => o as OrderSummary);
+
+/**
+ * Kiểm tra xem đơn hàng mang đi có đang bị tạm giữ để đối soát thanh toán hay không (P4-C04).
+ * Trả về true nếu paymentReviewRequired=true hoặc payment.reconciliationRequired=true.
+ */
+export function isPaymentReviewRequired(order: OrderSummary | OrderDetail | null | undefined): boolean {
+  if (!order || order.type !== 'takeaway') return false;
+  if ('paymentReviewRequired' in order && Boolean(order.paymentReviewRequired)) return true;
+  if ('payment' in order && order.payment && 'reconciliationRequired' in order.payment && Boolean(order.payment.reconciliationRequired)) return true;
+  return false;
+}
+

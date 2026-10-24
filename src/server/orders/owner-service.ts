@@ -4,18 +4,19 @@ import type { CompleteOrderInput, OrderDetail, OrderTransitionInput, OwnerOrders
 import type { OwnerContext } from "@/server/auth/verify-owner";
 import { ApiFault, validate } from "@/server/security/api";
 import { claimNextInput, completeOrderInput, ownerOrdersCursor, ownerOrdersQuery, readyOrderInput } from "@/lib/validations/owner-orders";
-import { dineInOrderResponse, dineInOrderSummaryResponse, orderId } from "@/lib/validations/orders";
+import { orderResponse, orderSummaryResponse, orderId } from "@/lib/validations/orders";
 import { OrderFault } from "./database";
 import { executeOwnerOrder } from "./owner-database";
+import { completeTakeawayPickup } from "@/server/pickup/service";
 
 const context = (owner: OwnerContext) => ({ storeId: owner.storeId, ownerId: owner.authUserId });
 function snapshot(value: unknown): OrderDetail {
-  const parsed = dineInOrderResponse.safeParse(value);
+  const parsed = orderResponse.safeParse(value);
   if (!parsed.success) throw new OrderFault("INTERNAL_ERROR");
   return parsed.data;
 }
 const listResponse = z.strictObject({
-  storeId: orderId, orders: z.array(dineInOrderSummaryResponse).max(100), detail: dineInOrderResponse.nullable(),
+  storeId: orderId, orders: z.array(orderSummaryResponse).max(100), detail: orderResponse.nullable(),
   counts: z.strictObject({ accepted: z.number().int().nonnegative(), preparing: z.number().int().nonnegative(), ready: z.number().int().nonnegative(), paymentException: z.number().int().nonnegative() }),
   after: ownerOrdersCursor.shape.after.nullable(), updatedAt: z.iso.datetime({ offset: true }),
 });
@@ -50,7 +51,6 @@ export async function markOwnerOrderReady(owner: OwnerContext, id: string, input
 export async function completeOwnerOrder(owner: OwnerContext, id: string, input: CompleteOrderInput): Promise<OrderDetail> {
   const target = validate(orderId, id);
   const command = validate(completeOrderInput, input);
-  // No pickup verifier exists in Phase3; never send or persist the raw proof.
-  if (command.type === "takeaway") throw new OrderFault("INVALID_STATE_TRANSITION");
+  if (command.type === "takeaway") return completeTakeawayPickup(owner, target, command);
   return snapshot(await executeOwnerOrder("complete", { ...context(owner), orderId: target, ...command }));
 }

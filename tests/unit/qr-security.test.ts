@@ -67,7 +67,8 @@ describe("QR/session boundaries", () => {
     const response = apiFailure(new Error("session code=private; SQL details"));
     expect(response.status).toBe(500);
     expect(await response.text()).not.toContain("private");
-    expect(spy).toHaveBeenCalledWith('{"event":"api.internal_failure"}');
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(spy.mock.calls[0][0])).toEqual({ event: "api.internal_failure", correlationId: expect.stringMatching(/^[a-f0-9-]{36}$/) });
     spy.mockRestore();
   });
 });

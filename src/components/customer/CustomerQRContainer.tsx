@@ -366,7 +366,9 @@ const CustomerQRContainerContent: React.FC<CustomerQRContainerProps> = ({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-[#1D2522]">
-                        Đơn #{String(activeOrder.ticketNo).padStart(3, '0')}
+                        {activeOrder.ticketNo !== null && activeOrder.ticketNo !== undefined && activeOrder.ticketNo > 0
+                          ? `Đơn #${String(activeOrder.ticketNo).padStart(3, '0')}`
+                          : `Đơn #${activeOrder.id.slice(0, 6).toUpperCase()}`}
                       </span>
                       <span
                         className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusConfig.badgeClass}`}

@@ -32,6 +32,7 @@ import {
 import { OrderQueueCard } from './OrderQueueCard';
 import { ClaimNextButton } from './ClaimNextButton';
 import { OrderDetailPanel } from './OrderDetailPanel';
+import { TakeawayPickupVerificationDialog } from './TakeawayPickupVerificationDialog';
 import { OrdersQueueSkeleton, OrderDetailSkeleton } from '../OwnerTabSkeletons';
 
 export interface OwnerOrdersViewProps {
@@ -108,6 +109,9 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState<boolean>(false);
   const [isSheetClosing, setIsSheetClosing] = useState<boolean>(false);
 
+  // 8. Dialog xác minh mã nhận món mang đi (P4-G03)
+  const [takeawayVerifyingOrder, setTakeawayVerifyingOrder] = useState<OrderDetail | null>(null);
+
   // Stable UUID ref cho claim FIFO
   const claimRequestIdRef = useRef<string | null>(null);
 
@@ -135,27 +139,64 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
     }, 4000);
   }, []);
 
+  const selectedOrderIdRef = useRef<string | null>(selectedOrderId);
+  useEffect(() => {
+    selectedOrderIdRef.current = selectedOrderId;
+  }, [selectedOrderId]);
+
+  // Xử lý chuyển đổi giữa các tab Hàng đợi / Lịch sử / Thanh toán
+  const handleViewChange = useCallback((newView: QueueViewType) => {
+    if (newView === view) return;
+    selectedOrderIdRef.current = null;
+    setSelectedOrderId(null);
+    setSelectedOrder(null);
+    setIsLoading(true);
+    setErrorMessage(null);
+    setView(newView);
+    setStatusFilter('all');
+  }, [view]);
+
+  // Xử lý chuyển đổi loại đơn (Tất cả / Tại bàn / Mang đi)
+  const handleTypeChange = useCallback((newType: OrderTypeFilter) => {
+    if (newType === typeFilter) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    setTypeFilter(newType);
+  }, [typeFilter]);
+
+  // Xử lý chuyển đổi tab trạng thái
+  const handleStatusChange = useCallback((newStatus: OrderStatusFilter) => {
+    if (newStatus === statusFilter) return;
+    setIsLoading(true);
+    setErrorMessage(null);
+    setStatusFilter(newStatus);
+  }, [statusFilter]);
+
   // Xây dựng query chuẩn tuân thủ API contract R07
-  const buildQuery = useCallback((): OwnerOrdersQuery => {
-    const q: OwnerOrdersQuery = {
-      view,
-      limit: 50,
-    };
+  const buildQuery = useCallback(
+    (targetOrderId?: string | null): OwnerOrdersQuery => {
+      const q: OwnerOrdersQuery = {
+        view,
+        limit: 50,
+      };
 
-    if (typeFilter !== 'all') {
-      q.type = typeFilter;
-    }
+      if (typeFilter !== 'all') {
+        q.type = typeFilter;
+      }
 
-    if (statusFilter !== 'all') {
-      q.status = statusFilter;
-    }
+      if (statusFilter !== 'all') {
+        q.status = statusFilter;
+      }
 
-    if (selectedOrderId) {
-      q.orderId = selectedOrderId;
-    }
+      const activeOrderId = targetOrderId !== undefined ? targetOrderId : selectedOrderIdRef.current;
+      if (activeOrderId) {
+        q.orderId = activeOrderId;
+      }
 
-    return q;
-  }, [view, typeFilter, statusFilter, selectedOrderId]);
+      return q;
+    },
+    [view, typeFilter, statusFilter]
+  );
 
   // Nạp danh sách đơn hàng từ API R07 với generation guard (F04) và pagination cursor (F05)
   const loadOrders = useCallback(
@@ -266,14 +307,14 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
     loadOrdersRef.current = () => loadOrders(false);
   });
 
-  // Tải lần đầu và khi bộ lọc thay đổi
+  // Tải lần đầu và khi bộ lọc thay đổi (Hiệu ứng loading mượt mà khi đổi tab)
   useEffect(() => {
     let cancelled = false;
     const fetchGen = ++fetchGenerationRef.current;
 
     void (async () => {
       try {
-        const query = buildQuery();
+        const query = buildQuery(selectedOrderIdRef.current);
         const data: ApiOwnerOrdersView = await getOwnerOrders(query);
         if (cancelled || fetchGen !== fetchGenerationRef.current) return;
 
@@ -284,9 +325,29 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
 
         if (data.detail) {
           setSelectedOrder(data.detail);
-        } else if (data.orders.length > 0 && !selectedOrderId) {
-          // Tự chọn đơn đầu tiên nếu chưa có đơn nào được chọn
-          setSelectedOrderId(data.orders[0].id);
+          setSelectedOrderId(data.detail.id);
+          selectedOrderIdRef.current = data.detail.id;
+        } else if (data.orders.length > 0) {
+          const match = selectedOrderIdRef.current && data.orders.some((o) => o.id === selectedOrderIdRef.current);
+          if (!match) {
+            const firstId = data.orders[0].id;
+            setSelectedOrderId(firstId);
+            selectedOrderIdRef.current = firstId;
+            void (async () => {
+              try {
+                const detailRes = await getOwnerOrders({ orderId: firstId, limit: 1 });
+                if (!cancelled && fetchGen === fetchGenerationRef.current && detailRes.detail) {
+                  setSelectedOrder(detailRes.detail);
+                }
+              } catch {
+                // Giữ nguyên fallback
+              }
+            })();
+          }
+        } else {
+          setSelectedOrderId(null);
+          setSelectedOrder(null);
+          selectedOrderIdRef.current = null;
         }
 
         if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
@@ -316,7 +377,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [view, typeFilter, statusFilter, buildQuery, initialOrders, selectedOrderId]);
+  }, [view, typeFilter, statusFilter, buildQuery]);
 
   // Lắng nghe visibility change & online events
   useEffect(() => {
@@ -476,7 +537,11 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         if (err instanceof MenuApiError) {
           if (err.status === 409) {
             pendingTransitionRef.current = null;
-            showToast('error', 'Trạng thái đơn hàng đã được cập nhật ở nơi khác. Đang làm mới...');
+            if (err.error.code === 'PAYMENT_REVIEW_REQUIRED') {
+              showToast('error', 'Đơn hàng đang cần đối soát thanh toán. Không thể chuyển sang sẵn sàng.');
+            } else {
+              showToast('error', 'Trạng thái đơn hàng đã được cập nhật ở nơi khác. Đang làm mới...');
+            }
             await loadOrders(false);
           } else if (err.status >= 500) {
             showToast('error', 'Máy chủ gặp sự cố trong khi xử lý. Bấm lại để thử lại với đúng yêu cầu ban đầu.');
@@ -504,7 +569,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
       if (isActionPending) return;
 
       if (order.type !== 'dine_in') {
-        showToast('info', 'Đơn mang đi yêu cầu xác minh mã nhận món (Phase 4).');
+        setTakeawayVerifyingOrder(order);
         return;
       }
 
@@ -543,7 +608,11 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
         if (err instanceof MenuApiError) {
           if (err.status === 409) {
             pendingTransitionRef.current = null;
-            showToast('error', 'Đơn hàng đã được hoàn thành ở nơi khác. Đang làm mới...');
+            if (err.error.code === 'PAYMENT_REVIEW_REQUIRED') {
+              showToast('error', 'Đơn hàng đang cần đối soát thanh toán. Không thể giao món.');
+            } else {
+              showToast('error', 'Đơn hàng đã được hoàn thành ở nơi khác. Đang làm mới...');
+            }
             await loadOrders(false);
           } else if (err.status >= 500) {
             showToast('error', 'Máy chủ gặp sự cố trong khi xử lý. Bấm lại để thử lại với đúng yêu cầu ban đầu.');
@@ -560,6 +629,34 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
       }
     },
     [isActionPending, loadOrders, showToast]
+  );
+
+  // Mở dialog xác minh mã nhận món mang đi
+  const handleVerifyTakeawayPickup = useCallback((order: OrderDetail) => {
+    setTakeawayVerifyingOrder(order);
+  }, []);
+
+  // Xác nhận giao món mang đi qua R10 (completeOrder với type: 'takeaway', pickupCode)
+  const handleConfirmTakeawayPickup = useCallback(
+    async (order: OrderDetail, pickupCode: string, requestId: string) => {
+      const updatedOrder = await completeOrder(order.id, {
+        requestId,
+        expectedVersion: order.version,
+        type: 'takeaway',
+        pickupCode,
+      });
+
+      if (selectedOrderId === order.id) {
+        setSelectedOrder(updatedOrder);
+      }
+      const ticketStr = updatedOrder.ticketNo
+        ? `#${String(updatedOrder.ticketNo).padStart(3, '0')}`
+        : `#${updatedOrder.id.slice(0, 6)}`;
+      showToast('success', `Đơn ${ticketStr} đã hoàn tất giao món.`);
+      setTakeawayVerifyingOrder(null);
+      await loadOrders(false);
+    },
+    [selectedOrderId, loadOrders, showToast]
   );
 
   // Đóng Mobile Sheet có animation
@@ -625,12 +722,14 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
           {/* Bộ lọc Hàng đợi / Lịch sử / Loại đơn / Trạng thái */}
           <OrderFilters
             view={view}
-            onViewChange={setView}
+            onViewChange={handleViewChange}
             typeFilter={typeFilter}
-            onTypeChange={setTypeFilter}
+            onTypeChange={handleTypeChange}
             statusFilter={statusFilter}
-            onStatusChange={setStatusFilter}
+            onStatusChange={handleStatusChange}
             totalOrders={orders.length}
+            exceptionCount={counts.paymentException}
+            isLoading={isLoading}
           />
 
           {/* Nút Nhận đơn tiếp theo FIFO duy nhất */}
@@ -666,7 +765,9 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
                 <p className="text-xs text-[#727B77]">
                   {view === 'queue'
                     ? 'Không có đơn nào cần xử lý trong bộ lọc hiện tại.'
-                    : 'Chưa có lịch sử đơn hàng hoàn tất hoặc hủy.'}
+                    : view === 'exceptions'
+                      ? 'Không có đơn hàng nào cần đối soát hoặc đang chờ thanh toán.'
+                      : 'Chưa có lịch sử đơn hàng hoàn tất hoặc hủy.'}
                 </p>
               </div>
             ) : (
@@ -719,6 +820,7 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
               pendingActionType={pendingActionType}
               onMarkReady={handleMarkReady}
               onComplete={handleComplete}
+              onVerifyTakeawayPickup={handleVerifyTakeawayPickup}
             />
           )}
         </aside>
@@ -766,11 +868,23 @@ export const OwnerOrdersView: React.FC<OwnerOrdersViewProps> = ({
                 pendingActionType={pendingActionType}
                 onMarkReady={handleMarkReady}
                 onComplete={handleComplete}
+                onVerifyTakeawayPickup={handleVerifyTakeawayPickup}
               />
             </div>
           </div>
         </div>
       )}
+
+      {/* =====================================================================
+          DIALOG XÁC MINH MÃ NHẬN MÓN MANG ĐI (P4-G03)
+         ===================================================================== */}
+      <TakeawayPickupVerificationDialog
+        order={takeawayVerifyingOrder}
+        isOpen={!!takeawayVerifyingOrder}
+        onClose={() => setTakeawayVerifyingOrder(null)}
+        onConfirmPickup={handleConfirmTakeawayPickup}
+        onRefreshOrders={() => loadOrders(false)}
+      />
     </div>
   );
 };

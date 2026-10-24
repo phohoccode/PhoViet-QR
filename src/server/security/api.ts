@@ -1,9 +1,16 @@
+import { traceEvent } from "@/server/security/trace";
 import "server-only";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { ApiErrorCode, ApiErrorDetails, ApiResponse } from "@contracts";
 
 const messages: Partial<Record<ApiErrorCode, string>> = {
+  INVALID_PICKUP_CODE: "Mã nhận món không hợp lệ hoặc đã hết hiệu lực.",
+  PICKUP_NOT_ALLOWED: "Đơn chưa đủ điều kiện giao món.",
+  PICKUP_CREDENTIAL_UNAVAILABLE: "Chưa thể xác minh mã nhận món. Vui lòng thử lại sau.",
+  ORDER_ALREADY_COMPLETED: "Đơn đã được giao.",
+  PAYMENT_PROVIDER_UNAVAILABLE: "Chưa cấu hình cổng thanh toán. Vui lòng liên hệ chủ quán.",
+  PAYMENT_REVIEW_REQUIRED: "Thanh toán cần được đối soát. Không chuyển tiền thêm.",
   INVALID_QR: "Mã QR không hợp lệ hoặc đã bị khóa.",
   SESSION_REQUIRED: "Vui lòng xác minh mã phiên bàn.",
   SESSION_EXPIRED: "Phiên bàn hoặc quyền truy cập đã hết hiệu lực.",
@@ -19,6 +26,9 @@ const messages: Partial<Record<ApiErrorCode, string>> = {
   INTERNAL_ERROR: "Dịch vụ tạm thời không khả dụng. Vui lòng thử lại.",
 };
 const statuses: Partial<Record<ApiErrorCode, number>> = {
+  INVALID_PICKUP_CODE: 422, PICKUP_NOT_ALLOWED: 409,
+  PICKUP_CREDENTIAL_UNAVAILABLE: 503, ORDER_ALREADY_COMPLETED: 409,
+  PAYMENT_PROVIDER_UNAVAILABLE: 503, PAYMENT_REVIEW_REQUIRED: 409,
   INVALID_QR: 404, RESOURCE_NOT_FOUND: 404, SESSION_REQUIRED: 403, SESSION_EXPIRED: 410,
   SESSION_CHECKOUT_PENDING: 409, INVALID_SESSION_CODE: 422, INVALID_STATE_TRANSITION: 409,
   UNAUTHORIZED: 401, FORBIDDEN: 403, VALIDATION_ERROR: 400, DUPLICATE_REQUEST_CONFLICT: 409,
@@ -31,7 +41,7 @@ export class ApiFault extends Error {
 }
 export function apiFailure(error: unknown): NextResponse<ApiResponse<never>> {
   const fault = error instanceof ApiFault ? error : new ApiFault("INTERNAL_ERROR");
-  if (fault.code === "INTERNAL_ERROR") console.error(JSON.stringify({ event: "api.internal_failure" }));
+  if (fault.code === "INTERNAL_ERROR") traceEvent("api.internal_failure");
   const response = NextResponse.json({ data: null, error: {
     code: fault.code, message: fault.message, ...(fault.details ? { details: fault.details } : {}),
   } }, { status: statuses[fault.code] ?? 500 });

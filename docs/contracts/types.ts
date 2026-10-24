@@ -111,7 +111,8 @@ type State<S extends OrderStatus, F extends FulfillmentStatus> = {
   fulfillmentStatus: F;
 };
 type DineInContext = { type: 'dine_in'; tableSessionId: Id; table: TableRef; paymentStatus: 'unpaid' | 'paid' };
-type TakeawayContext = { type: 'takeaway'; tableSessionId: null; table: null };
+/** A paid review hold retains its historical ticket; it is ineligible for preparation/pickup. */
+type TakeawayContext = { type: 'takeaway'; tableSessionId: null; table: null; paymentReviewRequired?: boolean };
 type ActiveState =
   | State<'accepted', 'awaiting_preparation'>
   | State<'preparing', 'preparing'>
@@ -145,7 +146,7 @@ export type TakeawayPaymentViewState = IntentViewBase & (
       intentStatus: 'pending'; reconciliationRequired: false;
       checkoutUrl: string | null; qrPayload: string | null; // both null while adapter is being retried
     })
-  | (PaymentLabel<'paid'> & { intentStatus: 'succeeded'; reconciliationRequired: false })
+  | (PaymentLabel<'paid'> & { intentStatus: 'succeeded'; reconciliationRequired: boolean })
   | (PaymentLabel<'failed'> & { intentStatus: 'failed'; reconciliationRequired: false })
   | (PaymentLabel<'expired'> & { intentStatus: 'expired'; reconciliationRequired: false })
   | (PaymentLabel<'exception'> & { intentStatus: 'exception'; reconciliationRequired: true })
@@ -201,7 +202,9 @@ export type ApiErrorCode =
   | 'INVALID_QR' | 'SESSION_REQUIRED' | 'SESSION_EXPIRED' | 'SESSION_CHECKOUT_PENDING' | 'INVALID_SESSION_CODE'
   | 'OUT_OF_STOCK' | 'PRICE_CHANGED' | 'ORDER_NOT_FOUND'
   | 'PAYMENT_PENDING' | 'PAYMENT_MISMATCH' | 'PAYMENT_EXPIRED'
-  | 'INVALID_PICKUP_CODE' | 'INVALID_STATE_TRANSITION' | 'DUPLICATE_REQUEST_CONFLICT'
+  | 'PAYMENT_PROVIDER_UNAVAILABLE' | 'PAYMENT_REVIEW_REQUIRED'
+  | 'INVALID_PICKUP_CODE' | 'PICKUP_CREDENTIAL_UNAVAILABLE' | 'PICKUP_NOT_ALLOWED' | 'ORDER_ALREADY_COMPLETED'
+  | 'INVALID_STATE_TRANSITION' | 'DUPLICATE_REQUEST_CONFLICT'
   | 'RATE_LIMITED' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'VALIDATION_ERROR'
   | 'STORE_NOT_ACCEPTING_ORDERS' | 'RESOURCE_NOT_FOUND' | 'INTERNAL_ERROR';
 export interface ApiErrorDetails {
@@ -233,7 +236,7 @@ export interface RequestCommand { requestId: Id }
 export interface OrderTransitionInput extends RequestCommand { expectedVersion: number }
 export type CompleteOrderInput = OrderTransitionInput & (
   | { type: 'dine_in' }
-  | { type: 'takeaway'; pickupCode: string } // transient proof; redact from logs/results
+  | { type: 'takeaway'; pickupCode: string } // exactly six ASCII digits; transient, redact logs/results
 );
 export interface OwnerOrdersQuery {
   view?: 'queue' | 'exceptions' | 'history';
@@ -273,7 +276,7 @@ export interface RotateTablePinInput extends RequestCommand { expectedVersion: n
 /** PRIVATE buyer-only projection, explicitly requested; never an owner/list DTO. */
 export interface PrivateOrderTrackingView {
   order: OrderDetail;
-  pickup: { code: string; expiresAt: IsoTimestamp } | null;
+  pickup: { code: string; expiresAt: IsoTimestamp } | null; // six ASCII digits, only buyer scope
 }
 export type SettleSessionInput = RequestCommand & (
   | { action: 'begin_checkout'; expectedVersion: number }

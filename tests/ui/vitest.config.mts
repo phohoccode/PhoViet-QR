@@ -5,6 +5,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('../../src', import.meta.url)),
+      '@contracts': fileURLToPath(new URL('../../docs/contracts/types.ts', import.meta.url)),
     },
   },
   test: {

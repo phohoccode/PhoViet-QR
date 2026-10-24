@@ -28,9 +28,9 @@ export const ClaimNextButton: React.FC<ClaimNextButtonProps> = ({
       className={`bg-[#FAFBFB] p-3 sm:p-3.5 rounded-2xl border border-[#E9ECEA] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${className}`}
     >
       <div className="text-xs">
-        <p className="font-bold text-[#1D2522]">Quy trình chế biến công bằng (FIFO)</p>
+        <p className="font-bold text-[#1D2522]">Chế biến món theo thứ tự</p>
         <p className="text-[#727B77] mt-0.5">
-          Hệ thống tự động tiếp nhận đơn cũ nhất đang chờ làm.
+          Hệ thống tự động chọn đơn đặt trước để chế biến trước, đảm bảo phục vụ công bằng cho mọi khách hàng.
         </p>
       </div>
 
@@ -38,11 +38,10 @@ export const ClaimNextButton: React.FC<ClaimNextButtonProps> = ({
         type="button"
         disabled={!hasAcceptedOrders || isClaiming}
         onClick={onClaimNext}
-        className={`w-full sm:w-auto h-12 px-6 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
-          hasAcceptedOrders && !isClaiming
+        className={`w-full sm:w-auto h-12 px-6 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${hasAcceptedOrders && !isClaiming
             ? 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.98] text-white cursor-pointer'
             : 'bg-[#F1F3F2] text-[#A0A8A5] border border-[#E9ECEA] cursor-not-allowed shadow-none'
-        }`}
+          }`}
         aria-label="Nhận đơn tiếp theo trong hàng đợi chế biến"
       >
         {isClaiming ? (
@@ -53,7 +52,7 @@ export const ClaimNextButton: React.FC<ClaimNextButtonProps> = ({
         ) : (
           <>
             <ChefHat className="w-4 h-4" aria-hidden="true" />
-            <span>Nhận đơn tiếp theo</span>
+            <span className='whitespace-nowrap'>Nhận đơn tiếp theo</span>
           </>
         )}
       </button>

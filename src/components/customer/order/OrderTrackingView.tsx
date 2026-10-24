@@ -34,12 +34,16 @@ import type { OrderDetail, OrderStatus } from '../../../../docs/contracts/types'
 import { ORDER_STATUS_LABELS } from '../../../../docs/contracts/types';
 import {
   getCustomerOrderTracking,
+  getPrivateOrderTracking,
   OrderApiError,
 } from '@/features/orders/api-client';
 import {
   saveActiveOrderSummary,
   type ActiveOrderSummary,
 } from './active-order-storage';
+import { isPaymentReviewRequired } from '@/lib/validations/orders';
+import { TakeawayPaymentView } from '../payment/TakeawayPaymentView';
+import { TakeawayPickupCard } from './TakeawayPickupCard';
 
 export interface OrderTrackingViewProps {
   orderId: string;
@@ -208,6 +212,17 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [pickupCode, setPickupCode] = useState<string | null>(null);
+  const [isLoadingPickup, setIsLoadingPickup] = useState<boolean>(() =>
+    Boolean(
+      initialOrder &&
+        initialOrder.type === 'takeaway' &&
+        !isPaymentReviewRequired(initialOrder) &&
+        (initialOrder.status === 'accepted' ||
+          initialOrder.status === 'preparing' ||
+          initialOrder.status === 'ready')
+    )
+  );
 
   // Tham chiếu timer polling có thể thay đổi tần suất linh hoạt (5–8s mặc định, 30s khi lỗi)
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -226,10 +241,28 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
       }
 
       try {
-        const resolvedOrder = await getCustomerOrderTracking(orderId);
+        let resolvedOrder: OrderDetail;
+        let privatePickupCode: string | null = null;
+
+        try {
+          const privateView = await getPrivateOrderTracking(orderId);
+          resolvedOrder = privateView.order;
+          privatePickupCode = privateView.pickup?.code ?? null;
+        } catch {
+          // Fallback sang endpoint chuẩn nếu private tracking không khả dụng
+          resolvedOrder = await getCustomerOrderTracking(orderId);
+        }
+
+        const isHeldForReview = isPaymentReviewRequired(resolvedOrder);
         setErrorMessage(null);
         setErrorCode(null);
         setOrder(resolvedOrder);
+
+        if (privatePickupCode && !isHeldForReview) {
+          setPickupCode(privatePickupCode);
+        } else if (isHeldForReview) {
+          setPickupCode(null);
+        }
 
         if (resolvedOrder.status === 'completed' || resolvedOrder.status === 'cancelled') {
           isTerminalRef.current = true;
@@ -296,80 +329,67 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
     loadOrderRef.current = loadOrder;
   });
 
-  // Khởi tạo tải lần đầu bằng pattern async IIFE có cancellation chuẩn React
+  // Khởi tạo tải lần đầu hoặc nạp mã nhận món nếu đã có initialOrder
   useEffect(() => {
-    if (order) return;
-
     let cancelled = false;
+
+    // Nếu đã có initialOrder
+    if (initialOrder) {
+      // Nếu là Takeaway đang chuẩn bị/sẵn sàng -> tải ngay mã nhận món (nếu không bị hold)
+      if (
+        initialOrder.type === 'takeaway' &&
+        !isPaymentReviewRequired(initialOrder) &&
+        (initialOrder.status === 'accepted' ||
+          initialOrder.status === 'preparing' ||
+          initialOrder.status === 'ready')
+      ) {
+        void getPrivateOrderTracking(orderId)
+          .then((privateView) => {
+            if (!cancelled && privateView?.pickup?.code) {
+              setPickupCode(privateView.pickup.code);
+            }
+          })
+          .catch(() => {
+            // Không làm gián đoạn luồng xem đơn nếu private tracking chưa cấp mã
+          })
+          .finally(() => {
+            if (!cancelled) {
+              setIsLoadingPickup(false);
+            }
+          });
+      }
+
+      if (initialOrder.status === 'completed' || initialOrder.status === 'cancelled') {
+        isTerminalRef.current = true;
+        return;
+      }
+
+      // Lên lịch poll lần tiếp theo sau 6s
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = setTimeout(() => {
+        if (document.visibilityState === 'visible' && navigator.onLine) {
+          void loadOrderRef.current?.(false);
+        }
+      }, 6000);
+
+      return () => {
+        cancelled = true;
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      };
+    }
+
+    // Nếu chưa có initialOrder -> tải ngay lần đầu
     void (async () => {
-      try {
-        const resolvedOrder = await getCustomerOrderTracking(orderId);
-        if (cancelled) return;
-        setOrder(resolvedOrder);
-
-        if (resolvedOrder.status === 'completed' || resolvedOrder.status === 'cancelled') {
-          isTerminalRef.current = true;
-          return;
-        }
-
-        // Lên lịch poll lần tiếp theo sau 6s
-        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-        pollTimerRef.current = setTimeout(() => {
-          if (document.visibilityState === 'visible' && navigator.onLine) {
-            void loadOrderRef.current?.(false);
-          }
-        }, 6000);
-      } catch (err: unknown) {
-        if (cancelled) return;
-
-        if (err instanceof OrderApiError) {
-          setErrorCode(err.error.code);
-          const status = err.status;
-
-          if (status === 404) {
-            setErrorMessage('Không tìm thấy đơn hàng #' + orderId.slice(0, 8));
-            isTerminalRef.current = true;
-            return;
-          } else if (status === 401 || status === 403 || status === 410) {
-            setErrorMessage(
-              'Bạn không có quyền xem đơn hàng này hoặc phiên bàn của bạn đã kết thúc.'
-            );
-            isTerminalRef.current = true;
-            return;
-          } else if (status === 429) {
-            const waitMs = Math.max(10, err.retryAfterSeconds ?? 15) * 1000;
-            if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-            pollTimerRef.current = setTimeout(() => {
-              if (document.visibilityState === 'visible' && navigator.onLine) {
-                void loadOrderRef.current?.(false);
-              }
-            }, waitMs);
-            return;
-          } else {
-            setErrorMessage(err.error.message || 'Không thể tải thông tin đơn hàng.');
-          }
-        } else {
-          setErrorMessage('Mất kết nối mạng. Vui lòng kiểm tra đường truyền và thử lại.');
-        }
-
-        // Backoff lên 30s khi lỗi
-        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
-        pollTimerRef.current = setTimeout(() => {
-          if (document.visibilityState === 'visible' && navigator.onLine) {
-            void loadOrderRef.current?.(false);
-          }
-        }, 30000);
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+      if (!cancelled) {
+        await loadOrder(false);
       }
     })();
 
     return () => {
       cancelled = true;
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [order, orderId]);
+  }, [orderId, initialOrder, loadOrder]);
 
   // Đồng bộ trạng thái đơn hàng sang sessionStorage và broadcast cho các màn hình khác
   useEffect(() => {
@@ -475,6 +495,36 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
     );
   }
 
+  // Nếu là đơn Takeaway đang chờ thanh toán hoặc cần đối soát -> hiển thị TakeawayPaymentView
+  if (order.type === 'takeaway' && order.status === 'pending_payment') {
+    return (
+      <TakeawayPaymentView
+        order={order}
+        qrCode={qrCode}
+        uiStatus="pending_payment"
+        onCheckStatus={() => loadOrder(true)}
+        onBackToMenu={handleOrderMore}
+        onTrackOrder={() => loadOrder(true)}
+        className={className}
+      />
+    );
+  }
+
+  if (order.type === 'takeaway' && order.status === 'payment_exception') {
+    return (
+      <TakeawayPaymentView
+        order={order}
+        qrCode={qrCode}
+        uiStatus="review_required"
+        onCheckStatus={() => loadOrder(true)}
+        onBackToMenu={handleOrderMore}
+        onTrackOrder={() => loadOrder(true)}
+        className={className}
+      />
+    );
+  }
+
+  const isHold = isPaymentReviewRequired(order);
   const currentStepIdx = getStepIndex(order.status);
   const isCancelled = order.status === 'cancelled';
   const ticketDisplay =
@@ -507,7 +557,9 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                 Tiến độ đơn {ticketDisplay}
               </h1>
               <p className="text-[11px] text-[#727B77] mt-0.5">
-                {order.table?.label || 'Bàn phục vụ'} · Ăn tại bàn
+                {order.type === 'takeaway'
+                  ? 'Quầy nhận món · Mua mang đi'
+                  : `${order.table?.label || 'Bàn phục vụ'} · Ăn tại bàn`}
               </p>
             </div>
           </div>
@@ -538,6 +590,19 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
               {ORDER_STATUS_LABELS[order.status] || order.status}
             </span>
           </div>
+
+          {/* Cảnh báo tạm giữ đối soát thanh toán (P4-C04 / F08) */}
+          {isHold && (
+            <div className="p-4 rounded-2xl bg-[#FEF3F2] border border-[#FECDCA] text-[#D92D20] space-y-2 animate-dialog-card-in">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 flex-shrink-0 text-[#D92D20]" />
+                <span className="text-sm font-bold">Đơn hàng đang chờ đối soát thanh toán</span>
+              </div>
+              <p className="text-xs text-[#55605C] leading-relaxed">
+                Giao dịch thanh toán phát sinh thông tin cần đối soát lại với ngân hàng (paymentReviewRequired). Quán đang kiểm tra lại giao dịch và sẽ chuẩn bị món ngay sau khi hoàn tất đối soát.
+              </p>
+            </div>
+          )}
 
           {/* Nếu đơn bị hủy */}
           {isCancelled ? (
@@ -598,6 +663,32 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
                   {STEP_ORDER[currentStepIdx]?.desc || 'Đang xử lý'}
                 </span>
               </div>
+
+              {/* Thông báo sẵn sàng phục vụ cho Dine-in tại bàn */}
+              {order.status === 'ready' && order.type === 'dine_in' && (
+                <div className="mt-3 p-4 rounded-2xl bg-[#EFF8FF] border border-[#B2DDFF] space-y-2 text-[#175CD3] animate-dialog-card-in">
+                  <div className="flex items-center gap-2">
+                    <BellRing className="w-5 h-5 text-[#175CD3] animate-bounce flex-shrink-0" />
+                    <span className="text-sm font-bold">Món ăn đã sẵn sàng phục vụ</span>
+                  </div>
+                  <p className="text-xs text-[#175CD3]/90 leading-relaxed">
+                    Nhân viên đang mang món ăn đến bàn của quý khách. Chúc quý khách ngon miệng!
+                  </p>
+                </div>
+              )}
+
+              {/* Thẻ thông tin nhận món mang đi (TakeawayPickupCard) - Ẩn khi đang hold đối soát */}
+              {order.type === 'takeaway' && !isCancelled && !isHold && (
+                <div className="mt-3">
+                  <TakeawayPickupCard
+                    ticketNo={order.ticketNo}
+                    orderStatus={order.status}
+                    pickupCode={pickupCode}
+                    isLoadingPickup={isLoadingPickup}
+                    completedAt={order.status === 'completed' ? order.updatedAt : null}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -657,15 +748,31 @@ export const OrderTrackingView: React.FC<OrderTrackingViewProps> = ({
           </div>
 
           {/* Lưu ý thanh toán */}
-          <div className="p-3.5 rounded-2xl bg-[#FAFBFB] border border-[#E9ECEA] flex items-start gap-2.5 text-xs text-[#55605C]">
-            <Info className="w-4 h-4 text-[#35977D] flex-shrink-0 mt-0.5" aria-hidden="true" />
-            <div>
-              <p className="font-semibold text-[#1D2522]">Thanh toán tại bàn</p>
-              <p className="text-[11px] text-[#727B77] mt-0.5 leading-relaxed">
-                Khi dùng xong bữa, quý khách vui lòng báo nhân viên để thanh toán toàn bộ các đơn tại bàn.
-              </p>
+          {order.type === 'takeaway' ? (
+            <div className="p-3.5 rounded-2xl bg-[#FAFBFB] border border-[#E9ECEA] flex items-start gap-2.5 text-xs text-[#55605C]">
+              <Info className="w-4 h-4 text-[#35977D] flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="font-semibold text-[#1D2522]">
+                  {isHold ? 'Đang đối soát thanh toán VietQR' : 'Đã thanh toán VietQR'}
+                </p>
+                <p className="text-[11px] text-[#727B77] mt-0.5 leading-relaxed">
+                  {isHold
+                    ? 'Giao dịch đang được đối soát với ngân hàng. Quý khách vui lòng liên hệ nhân viên nếu cần hỗ trợ.'
+                    : `Đơn mang đi đã được thanh toán trước. Quý khách vui lòng đến quầy xuất trình số phiếu ${ticketDisplay} khi nhận món.`}
+                </p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl bg-[#FAFBFB] border border-[#E9ECEA] flex items-start gap-2.5 text-xs text-[#55605C]">
+              <Info className="w-4 h-4 text-[#35977D] flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="font-semibold text-[#1D2522]">Thanh toán tại bàn</p>
+                <p className="text-[11px] text-[#727B77] mt-0.5 leading-relaxed">
+                  Khi dùng xong bữa, quý khách vui lòng báo nhân viên để thanh toán toàn bộ các đơn tại bàn.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ===================================================================

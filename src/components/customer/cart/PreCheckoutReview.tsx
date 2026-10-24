@@ -25,7 +25,6 @@ import {
   Info,
   AlertCircle,
   AlertTriangle,
-  Lock,
   CheckCircle2,
   Loader2,
   RefreshCw,
@@ -36,6 +35,7 @@ import { calculateLineTotalVnd } from './types';
 import type { OrderDetail } from '../../../../docs/contracts/types';
 import { useDineInCheckout, type DineInCheckoutInstance } from '../order/useDineInCheckout';
 import { OrderConfirmedView } from '../order/OrderConfirmedView';
+import { TakeawayPaymentView } from '../payment/TakeawayPaymentView';
 
 interface PreCheckoutReviewProps {
   items: CustomerCartItem[];
@@ -95,8 +95,30 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
       ? 'Không tính được tổng (vượt giới hạn)'
       : new Intl.NumberFormat('vi-VN').format(subtotalVnd) + ' đ';
 
-  // Khi đơn đã được xác nhận bởi máy chủ -> hiển thị màn hình vé đơn
+  // Khi đơn đã được xác nhận bởi máy chủ
   if (checkout.status === 'confirmed' && checkout.confirmedOrder) {
+    // Nếu là đơn Takeaway đang chờ thanh toán VietQR -> hiển thị TakeawayPaymentView
+    if (checkout.confirmedOrder.type === 'takeaway' && checkout.confirmedOrder.status === 'pending_payment') {
+      return (
+        <TakeawayPaymentView
+          order={checkout.confirmedOrder}
+          qrCode={qrCode}
+          onBackToMenu={() => {
+            checkout.resetCheckout();
+            onBackToCart();
+            onCloseSheet?.();
+          }}
+          onTrackOrder={(orderId) => {
+            router.push(`/order/${encodeURIComponent(orderId)}?qrCode=${encodeURIComponent(qrCode)}`);
+          }}
+          onRetryNewPayment={() => {
+            checkout.resetCheckout();
+            onBackToCart();
+          }}
+        />
+      );
+    }
+
     return (
       <OrderConfirmedView
         order={checkout.confirmedOrder}
@@ -114,13 +136,20 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
     );
   }
 
-  const canSubmit =
+  const canSubmitDineIn =
     readiness.canProceedToReview &&
     subtotalVnd !== null &&
     items.length > 0 &&
     isTableVerified &&
-    !isTakeaway &&
     checkout.status !== 'submitting';
+
+  const canSubmitTakeaway =
+    readiness.canProceedToReview &&
+    subtotalVnd !== null &&
+    items.length > 0 &&
+    checkout.status !== 'submitting';
+
+  const canSubmit = isTakeaway ? canSubmitTakeaway : canSubmitDineIn;
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
@@ -371,21 +400,48 @@ export const PreCheckoutReview: React.FC<PreCheckoutReviewProps> = ({
          ======================================================================= */}
       <div className="p-4 bg-white border-t border-[#E9ECEA] space-y-2 flex-shrink-0">
         {isTakeaway ? (
-          <div className="space-y-2">
+          checkout.status === 'submitting' ? (
             <button
               type="button"
               disabled={true}
-              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#FAFBFB] border border-[#E9ECEA] text-[#A0A8A5] flex items-center justify-center gap-2 cursor-not-allowed shadow-none"
-              aria-label="Thanh toán mang đi (Sẽ mở ở Phase 4)"
+              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E]/70 text-white flex items-center justify-center gap-2 cursor-wait"
+              aria-label="Đang tạo mã thanh toán VietQR"
             >
-              <Lock className="w-4 h-4 text-[#A0A8A5]" aria-hidden="true" />
-              <span>Thanh toán mang đi (Sẽ mở ở Phase 4)</span>
+              <Loader2 className="w-4 h-4 animate-spin text-white" aria-hidden="true" />
+              <span>Đang tạo mã thanh toán VietQR...</span>
             </button>
+          ) : checkout.status === 'uncertain' ? (
+            <button
+              type="button"
+              onClick={checkout.retryUncertainOrder}
+              className="w-full h-12 rounded-xl text-xs sm:text-sm font-bold bg-[#1D725E] hover:bg-[#165B4B] text-white flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E]"
+              aria-label="Kiểm tra lại đơn đang gửi"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Kiểm tra lại / Thử lại gửi đơn</span>
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={checkout.submitOrder}
+                className={`w-full h-12 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 shadow-xs transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1D725E] ${
+                  !canSubmit
+                    ? 'bg-[#FAFBFB] border border-[#E9ECEA] text-[#A0A8A5] cursor-not-allowed'
+                    : 'bg-[#1D725E] hover:bg-[#165B4B] active:scale-[0.99] text-white'
+                }`}
+                aria-label="Tiếp tục thanh toán VietQR cho đơn mang đi"
+              >
+                <span>Tiếp tục thanh toán VietQR</span>
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </button>
 
-            <p className="text-[11px] text-[#727B77] text-center leading-tight">
-              Đơn mang đi sẽ thanh toán trước khi quán chế biến. Chức năng thanh toán mang đi sẽ được kích hoạt ở Phase 4.
-            </p>
-          </div>
+              <p className="text-[11px] text-[#727B77] text-center leading-tight">
+                Nhấn tiếp tục để nhận mã VietQR thanh toán chính thức trước khi quán bắt đầu chế biến.
+              </p>
+            </div>
+          )
         ) : !isTableVerified ? (
           <div className="space-y-2">
             <button

@@ -19,6 +19,7 @@ import {
   ArrowRight,
   PlusCircle,
   Info,
+  ShoppingBag,
 } from 'lucide-react';
 import type { OrderDetail } from '../../../../docs/contracts/types';
 import { ORDER_STATUS_LABELS } from '../../../../docs/contracts/types';
@@ -141,17 +142,28 @@ export const OrderConfirmedView: React.FC<OrderConfirmedViewProps> = ({
           {/* Thông tin bàn & hình thức */}
           <div className="grid grid-cols-2 gap-3 py-1 text-xs">
             <div className="p-2.5 rounded-xl bg-[#FAFBFB] border border-[#E9ECEA]">
-              <span className="text-[#727B77] block text-[11px]">Bàn phục vụ:</span>
+              <span className="text-[#727B77] block text-[11px]">
+                {order.type === 'takeaway' ? 'Địa điểm nhận:' : 'Bàn phục vụ:'}
+              </span>
               <span className="font-bold text-[#1D2522] text-sm mt-0.5 block">
-                {order.table?.label || tableLabel}
+                {order.type === 'takeaway' ? 'Quầy nhận món' : (order.table?.label || tableLabel)}
               </span>
             </div>
 
             <div className="p-2.5 rounded-xl bg-[#FAFBFB] border border-[#E9ECEA]">
               <span className="text-[#727B77] block text-[11px]">Hình thức:</span>
               <span className="font-bold text-[#1D725E] text-sm mt-0.5 block flex items-center gap-1">
-                <UtensilsCrossed className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Ăn tại bàn</span>
+                {order.type === 'takeaway' ? (
+                  <>
+                    <ShoppingBag className="w-3.5 h-3.5 text-[#026AA2]" aria-hidden="true" />
+                    <span className="text-[#026AA2]">Mua mang đi</span>
+                  </>
+                ) : (
+                  <>
+                    <UtensilsCrossed className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Ăn tại bàn</span>
+                  </>
+                )}
               </span>
             </div>
           </div>
@@ -202,11 +214,13 @@ export const OrderConfirmedView: React.FC<OrderConfirmedViewProps> = ({
             <span className="text-base font-extrabold text-[#1D725E]">{formattedTotal}</span>
           </div>
 
-          {/* Chú thích thanh toán Dine-in minh bạch */}
+          {/* Chú thích thanh toán Dine-in / Takeaway minh bạch */}
           <div className="p-3 rounded-xl bg-[#FAFBFB] border border-[#E9ECEA] flex items-start gap-2 text-[11px] text-[#55605C]">
             <Info className="w-4 h-4 text-[#35977D] flex-shrink-0 mt-0.5" aria-hidden="true" />
             <span>
-              Quý khách thanh toán tại bàn hoặc quầy thu ngân khi dùng xong bữa. Đơn này không cần thanh toán trước.
+              {order.type === 'takeaway'
+                ? 'Đơn mang đi đã được xác nhận thanh toán qua VietQR và chuyển vào hàng đợi chế biến. Quý khách vui lòng chú ý số thứ tự để nhận món tại quầy.'
+                : 'Quý khách thanh toán tại bàn hoặc quầy thu ngân khi dùng xong bữa. Đơn này không cần thanh toán trước.'}
             </span>
           </div>
         </div>

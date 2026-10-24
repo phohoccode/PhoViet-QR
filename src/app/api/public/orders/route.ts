@@ -1,8 +1,10 @@
+import { withApiTrace } from "@/server/security/trace";
 import type { NextRequest } from "next/server";
+import { after } from "next/server";
 import { createOrderInput } from "@/lib/validations/orders";
 import { apiSuccess, ApiFault, checkOrigin, noQuery, validate } from "@/server/security/api";
 import { guestRequestContext } from "@/server/security/request-context";
-import { createDineInOrder } from "@/server/orders/service";
+import { createCustomerOrder, provisionPayment } from "@/server/payments/service";
 import { orderFailure } from "@/server/orders/database";
 export const runtime = "nodejs";
 
@@ -28,10 +30,17 @@ async function readOrder(request: NextRequest) {
   } finally { reader.releaseLock(); }
 }
 export async function POST(request: NextRequest) {
-  try {
-    checkOrigin(request); noQuery(request);
-    const context = guestRequestContext(request, false);
-    const input = await readOrder(request);
-    return apiSuccess(await createDineInOrder(input, context), 201);
-  } catch (error) { return orderFailure(error); }
+  return withApiTrace(request, async () => {
+    try {
+      checkOrigin(request); noQuery(request);
+      const context = guestRequestContext(request, false);
+      const input = await readOrder(request);
+      const order = await createCustomerOrder(input, context);
+      if (order.payment.kind === "takeaway") {
+        const intentId = order.payment.intentId;
+        after(() => provisionPayment(intentId));
+      }
+      return apiSuccess(order, 201);
+    } catch (error) { return orderFailure(error); }
+  });
 }

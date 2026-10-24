@@ -29,6 +29,8 @@ Order pending_payment có thể hiển thị payment failed/expired trong khoả
 
 Intent chỉ dành takeaway, enum `pending | succeeded | failed | expired | exception`. `exception` là extension rõ ràng để biểu diễn nhánh reconciliation mà PRD yêu cầu và API payment trong ARCHITECTURE đã nêu. Đây không phải success.
 
+P4-C04 runtime: paid là terminal nhưng có thể có review hold sau anomaly tài chính. Giữ `succeeded`/`paid` và ticket/status lịch sử; trả `paymentReviewRequired:true` trên takeaway summary/detail và `payment.reconciliationRequired:true`. Loại đơn held khỏi queue/counts chế biến, đưa vào exceptions; không claim/ready/giao món. Ready trả409 PAYMENT_REVIEW_REQUIRED; pickup complete tiếp tục gate PICKUP_NOT_ALLOWED. Lần đầu hold emit payment.review_required + version; không có API bypass/clear-review. Provisional provider status observation chỉ áp dụng pending, verified webhook success clear provisional flag; không biến query status thành xác nhận paid. Migration012 và bằng chứng local tại `docs/handoffs/P4_C04_CODEX_TAKEAWAY_E2E_QA_REPORT.md`; provider thật BLOCKED_PROVIDER_E2E.
+
 | Intent từ → đến | Tác nhân | Guard / dữ liệu | Lỗi/ứng xử |
 |---|---|---|---|
 | Không tồn tại → pending | Backend create takeaway | Một intent/order, merchantRef unique, amount snapshot, expiry DB | DUPLICATE_REQUEST_CONFLICT nếu key đổi payload |
@@ -83,7 +85,7 @@ Không thêm queue bếp, station, shipment hay state machine DB độc lập. K
 | completed | served | collected | Dine-in đã phục vụ, takeaway đã verify+consume mã |
 | cancelled | cancelled | cancelled | Không nhận/giao tiếp |
 
-Mã nhận món là secret riêng, không phải ticket. Chỉ owner đã auth gửi mã người mua xuất trình để server verify; mã sai không đổi trạng thái, attempts/rate limit chống brute force. Retry cùng complete requestId trả thành công cũ dù mã đã consumed, sau khi kiểm quyền; key mới không được consume lần hai. V1 bổ sung PrivateOrderTrackingView riêng (R05 includePickup=true) cho buyer, không thêm pickupCode vào shared OrderDetail/list. Hash không đọc lại plaintext: draft Q5 ciphertext giao lại có ACL/TTL là ASSUMPTION cần chốt trước Phase4, không phải đã có storage.
+Mã nhận món là secret riêng, không phải ticket. Chỉ owner đã auth gửi mã người mua xuất trình để server verify; mã sai không đổi trạng thái, attempts/rate limit chống brute force. Retry cùng complete requestId trả thành công cũ dù mã đã consumed, sau khi kiểm quyền; key mới không được consume lần hai. V1 dùng PrivateOrderTrackingView riêng (R05 includePickup=true) cho buyer, không thêm pickupCode vào shared OrderDetail/list. P4-C03 triển khai HMAC verifier + ciphertext AES-256-GCM có ACL/TTL; GET không tạo mã. Credential cấp một lần sau paid, recovery qua job nội bộ; mã sáu số hạn 24 giờ, guest grant 12 giờ. Xem handoff P4_C03_CODEX_PICKUP_HANDOFF.md cho key lifecycle và bằng chứng local.
 
 ## 5. Transaction, idempotency và race cụ thể
 

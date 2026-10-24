@@ -205,7 +205,7 @@ it("C01 acceptance and claim share the gate; session close and guest reads do no
 });
 it("blocks takeaway proof before persistence and schema forbids pending-payment/ticketless takeaway", async () => {
   const id = seed(1, "ready")[0], before = count("operation_requests");
-  await expect(completeOwnerOrder(owner, id, { ...key(), expectedVersion: 1, type: "takeaway", pickupCode: "private-proof" })).rejects.toMatchObject({ code: "INVALID_STATE_TRANSITION" });
+  await expect(completeOwnerOrder(owner, id, { ...key(), expectedVersion: 1, type: "takeaway", pickupCode: "private-proof" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   expect(count("operation_requests")).toBe(before);
   expect(() => sql(`update public.orders set type='takeaway',status='pending_payment',ticket_no=null where id='${id}'`)).toThrow();
   for (const role of ["anon", "authenticated"]) {

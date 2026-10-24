@@ -6,7 +6,7 @@ export const claimNextInput = z.strictObject({ requestId: orderId });
 export const readyOrderInput = claimNextInput.extend({ expectedVersion: version });
 export const completeOrderInput = z.discriminatedUnion("type", [
   readyOrderInput.extend({ type: z.literal("dine_in") }),
-  readyOrderInput.extend({ type: z.literal("takeaway"), pickupCode: z.string().min(1).max(64) }),
+  readyOrderInput.extend({ type: z.literal("takeaway"), pickupCode: z.string().regex(/^[0-9]{6}$/) }),
 ]);
 export const ownerOrdersQuery = z.strictObject({
   view: z.enum(["queue", "exceptions", "history"]).default("queue"),
@@ -15,7 +15,7 @@ export const ownerOrdersQuery = z.strictObject({
   orderId: orderId.optional(), cursor: z.string().min(1).max(2048).optional(),
   limit: z.string().regex(/^[1-9]\d{0,2}$/).transform(Number).pipe(z.number().max(100)).optional().default(50),
 }).superRefine((query, ctx) => {
-  const allowed = { queue: ["accepted", "preparing", "ready"], exceptions: ["pending_payment", "payment_exception"], history: ["completed", "cancelled"] };
+  const allowed = { queue: ["accepted", "preparing", "ready"], exceptions: ["pending_payment", "payment_exception", "accepted", "preparing", "ready", "completed"], history: ["completed", "cancelled"] };
   if (query.status && !allowed[query.view].includes(query.status)) ctx.addIssue({ code: "custom", message: "Status does not belong to view" });
 });
 

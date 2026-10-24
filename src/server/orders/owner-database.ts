@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getClientEnv } from "@/lib/env/client";
 import { getServerEnv } from "@/lib/env/server";
 import { OrderFault } from "./database";
+import { ApiFault } from "@/server/security/api";
 
 export async function executeOwnerOrder(action: "list" | "claim" | "ready" | "complete", input: Record<string, unknown>): Promise<unknown> {
   try {
@@ -14,6 +15,7 @@ export async function executeOwnerOrder(action: "list" | "claim" | "ready" | "co
     if (error || !data || typeof data !== "object") throw new OrderFault("INTERNAL_ERROR");
     if (data.error) {
       switch (data.error) {
+        case "PAYMENT_REVIEW_REQUIRED": throw new ApiFault("PAYMENT_REVIEW_REQUIRED");
         case "FORBIDDEN": case "ORDER_NOT_FOUND": case "DUPLICATE_REQUEST_CONFLICT": case "INVALID_STATE_TRANSITION":
           throw new OrderFault(data.error);
         case "RATE_LIMITED": throw new OrderFault("RATE_LIMITED", { retryAfterSeconds: Math.max(1, Math.min(60, Number(data.retryAfterSeconds) || 60)) });
@@ -23,7 +25,7 @@ export async function executeOwnerOrder(action: "list" | "claim" | "ready" | "co
     if (!Object.hasOwn(data, "data")) throw new OrderFault("INTERNAL_ERROR");
     return data.data;
   } catch (error) {
-    if (error instanceof OrderFault) throw error;
+    if (error instanceof OrderFault || error instanceof ApiFault) throw error;
     // A timeout is uncertain; caller retries the SAME key. No automatic new claim.
     throw new OrderFault("INTERNAL_ERROR");
   }

@@ -1,0 +1,58 @@
+﻿# P4-C03 — Codex: Takeaway pickup verification
+
+Status: **READY_FOR_UI_INTEGRATION (backend local verified)**. Migration 011 and the pickup API are implemented and tested against the local Docker Supabase database. Do not apply to Production from this handoff; Production migration, webhook acceptance and real payOS payment E2E remain **NOT_RUN**.
+
+## Scope and ownership
+
+Codex owns `supabase/migrations/20261024001100_takeaway_pickup.sql`, `src/server/pickup/{crypto,service}.ts`, payment/order service integration, validation/error contracts, backend tests and this handoff. No customer or owner component was changed for C03. Concurrent Gemini UI work is preserved; its earlier lint/typecheck failures were resolved while backend verification continued. The final repository gates below pass.
+
+Migration 011 is additive. It changes the takeaway context check to allow `completed`, creates `pickup_credentials` and immutable `pickup_attempt_log`, adds deferred completion guards, replaces the takeaway summary projection, and exposes only the service-role RPC `p4_pickup_execute`. It does not rewrite table, QR, session, order or payment data. The preflight compares the normalized reviewed `p3_order_summary` body and requires migration 010's payment objects; a mismatch aborts before schema changes. SQL is one transaction and can be rolled back before commit.
+
+## Actual API contract for Gemini
+
+- `GET /api/public/orders/:id?includePickup=true` uses the existing HttpOnly guest cookie; the server derives the order grant proof, so clients never send a separate proof header. It returns `ApiSuccess<PrivateOrderTrackingView>`: `{ order, pickup }`. `pickup` is `{ code, expiresAt }` only for the same guest scope, a takeaway order whose payment is verified, status is `accepted | preparing | ready`, and a present unconsumed/unexpired credential. It is `null` for pending payment, exception, dine-in, cancelled, completed, expired, held/review orders or an absent credential. Wrong/expired guest scope is 404 `ORDER_NOT_FOUND`; no cookie is 401. The response is private and `no-store`; code never appears in the default order response, owner list/detail, event, outbox, audit, or log.
+- The read path never creates or rotates a credential. Missing credentials are recovered by the trusted payment webhook/reconciliation worker.
+- `POST /api/owner/orders/:id/complete` keeps the existing owner auth, origin and body contract. Dine-in remains `{requestId, expectedVersion, type:'dine_in'}`. Takeaway is `{requestId, expectedVersion, type:'takeaway', pickupCode:'000042'}` where the string is exactly six ASCII digits and leading zeroes are significant. A correct code works only when payment is verified, status is `ready`, the credential is unconsumed/unexpired, and no review/hold blocks delivery.
+- Same owner, operation and requestId with the same body returns the saved result even after consumption. Reusing that requestId with another payload returns `409 DUPLICATE_REQUEST_CONFLICT`; a new key after completion returns `409 ORDER_ALREADY_COMPLETED`. Wrong/expired/consumed code is `422 INVALID_PICKUP_CODE`; pending/preparing/unpaid/held is `409 PICKUP_NOT_ALLOWED`; stale version is `409 INVALID_STATE_TRANSITION`; missing key/ciphertext is `503 PICKUP_CREDENTIAL_UNAVAILABLE`; rate limits are `429 RATE_LIMITED` with `Retry-After`.
+
+## Credential lifecycle and security
+
+The code is generated with Node `crypto.randomInt(0, 1_000_000)` and padded to six ASCII digits. It is independent of table PIN and FIFO ticket. The database stores only a keyed HMAC verifier and AES-256-GCM ciphertext; the plaintext is never persisted. `PICKUP_ENCRYPTION_KEYS` and `PICKUP_HMAC_KEYS` are separate server-only JSON keyrings of canonical base64 32-byte keys. Retain old key IDs while their credentials or operation replays exist; rotate by adding a new ID and changing the active ID. Never put either ring under `NEXT_PUBLIC_` or reuse table/session keys.
+
+After a durable accepted/paid takeaway webhook, a separate trusted issuance transaction performs create-if-absent in the same database lock order as payment. A failure between acceptance and issuance leaves a paid order with no code; duplicate webhook or the internal reconciliation job recovers it. Twenty duplicate webhook/recovery calls keep the original code and emit one `pickup.issued` event. Issuance expires 24 hours after `accepted_at`; the buyer guest grant remains governed by its existing 12-hour scope. Missing configuration before issuance can be restored and recovered. Losing an existing credential's old encryption/HMAC key fails closed and cannot recover that same code; restore the original key from secure backup. No GET-side regeneration, rotate API, cross-device recovery by ticket, or completion bypass exists.
+
+Completion computes the HMAC proof and keyed command fingerprint before the transaction. The database checks membership and a store/request advisory lock before replay, then locks store (`FOR NO KEY UPDATE`) → payment intent → order → credential, rechecks membership, validates state and expected version, compares all 32 digest bytes, and commits status, credential consumption, actor event, outbox and operation replay result atomically. There is no network/crypto work while row locks are held and no `SKIP LOCKED`. The proof limiter is 10 verifications per owner/minute across orders; a broader 60 new commands per owner/minute also limits invalid-state spam. Five wrong attempts within 15 minutes lock that order for 15 minutes. Failed attempt audit stores only outcome, order, actor and request ID—never code or proof. Failed same-key replays preserve the original error without another attempt; after backoff a new attempt uses a new key. Dine-in and strict FIFO claim logic are unchanged.
+
+## Files and configuration
+
+- `src/server/pickup/crypto.ts`: CSPRNG, keyed HMAC, AES-GCM, strict key/artifact validation.
+- `src/server/pickup/service.ts`: issuance/recovery, scoped private tracking and owner completion bridge.
+- `src/server/payments/service.ts`: private tracking dispatch; webhook/reconcile issuance/recovery hooks.
+- `src/server/orders/owner-service.ts`: routes takeaway completion to the pickup transaction; dine-in path is unchanged.
+- `src/lib/validations/orders.ts`, `owner-orders.ts`, `docs/contracts/types.ts`, `src/server/security/api.ts`: completed/collected and six-digit/error contracts.
+- `.env.example`: blank pickup key-ring templates. `.env.local` has local-only generated pickup rings; values are not printed or committed. Existing payOS templates remain server-only (`PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY`, `PAYOS_ACCOUNT_NUMBER`, `PAYMENT_RETURN_ORIGIN`).
+
+## Verification evidence
+
+Passed locally:
+
+- `tests/unit/pickup.test.ts` plus existing unit suite: 117 tests total in the unit run.
+- Final `tests/integration/payments/payments.test.ts` (21 tests) + `pickup-migration.test.ts` (1 test): **22/22 passed** after all changes. Includes duplicate webhook/recovery, scoped reads, leading-zero code, 20 same-key and 20 different-key completion races, wrong-code lock, owner limiter, expiry/hold/type/store checks, deferred guards, outbox rollback, key outage recovery, owner-bound replay and membership revocation. Earlier focused reruns also passed.
+- `tests/integration/payments/pickup-migration.test.ts` and existing payment migration test: fresh migration, CRLF preflight, rollback/catalog preservation, validated constraints, RLS/ACL and server-role-only RPC checks.
+- `node tests/integration/payments/http-smoke.mjs`: real Next production build with loopback env; guest/owner scope, CSRF, validation, pending/ready gates, 20 signed webhook ACKs, one credential, 20 complete replays, one audit/outbox, replay conflict and completed private projection.
+- Full integration run: 118 passed in 15 files before the final owner replay case was added; the final expanded payment/pickup subset separately passed 22/22 above. `npm run test:auth`: 46 passed; `npm run test:db`: 9 passed; full unit run: 117 passed; full UI run: 165 passed. Static contract validation, `npm run lint`, `npm run typecheck`, `npm run build` and `git diff --check`: PASS. The HTTP scripts each compile a production-mode Next build using only loopback test env; the separate final `npm run build` uses normal local configuration and succeeds without provider IO.
+- `node tests/integration/orders/http-smoke.mjs`: existing FIFO/owner HTTP regression passed.
+
+Provider tests use signed local fixtures only. No real payment, transfer, Production SQL or public webhook registration was executed.
+
+## Current blockers and handoff
+
+No backend blocker remains for UI integration. Browser visual acceptance is **NOT_RUN**; passing UI unit tests/build does not establish visual acceptance. The named P4-C02 implementation/handoff and the longer P3/P4 prompt document filenames were absent. Actual references read were `docs/integration/P3_C01_ORDER_FIFO_HANDOFF.md`, `P3_C02_OWNER_QUEUE_HANDOFF.md`, `P3_C03_CODEX_E2E_HANDOFF.md` and `docs/handoffs/P4_C01_CODEX_PAYMENT_HANDOFF.md`. Transactional outbox and polling are present; there is no realtime publisher in this implementation. A trusted scheduler must call the authenticated reconciliation endpoint; no scheduler was installed automatically. Recovery scans at most 50 eligible paid orders per run; expired missing orders do not starve the batch.
+
+Rollback/deployment: migration 011 was applied only to local Docker and independently tested from migrations 001–011 in a disposable database, including explicit ROLLBACK, baseline-drift failure and CRLF conversion. Before commit, any failure rolls the whole migration back. After pickup traffic, retain evidence and use a reviewed forward migration; rolling application code back to the Phase4 payment implementation would block takeaway completion but must not delete consumed credentials or completed orders. Do not drop tables or replay an older context constraint over completed takeaway rows.
+
+Gemini should call the existing customer order client with `includePickup=true`, render `pickup.code` only in the buyer's tracking view, and submit the same `requestId` after an uncertain owner completion response. Do not add pickup code to shared owner/list DTOs, URL parameters, analytics or logs. For Production, first review/apply migrations 010 then 011 with the preflight output, configure both pickup keyrings and retain old keys through the credential lifetime, register the payOS webhook, then run a controlled paid → ready → pickup test. Real provider E2E is still pending.
+
+The response keeps the existing canonical `OrderDetail` and private wrapper. `completed` takeaway maps to `fulfillmentStatus:'collected'`; its current `updatedAt` reflects the completed transition. The exact fulfillment timestamp and verifier actor live in `pickup_credentials.completed_at/verified_at/verified_by`, without adding pickup secrets or new timestamp fields to shared order DTOs. The concurrent UI handoff is `docs/handoffs/P4_G03_GEMINI_PICKUP_UI_HANDOFF.md`; browser visual acceptance remains a separate gate.
+
+Safe E2E reproduction: start the local Docker stack, apply migrations 001–011 to that local instance, then run `node tests/integration/payments/http-smoke.mjs`. The script refuses any API URL other than `http://127.0.0.1:15421`, creates isolated UUID fixtures and test-only Auth users, builds Next with loopback credentials, signs fixture webhook data with test keys, exercises paid → FIFO claim → ready → pickup → completed, and removes only its fixtures/server. It never calls a payment provider, creates a live payment link or moves money.

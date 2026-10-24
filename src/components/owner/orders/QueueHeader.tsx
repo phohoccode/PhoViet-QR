@@ -31,10 +31,10 @@ export const QueueHeader: React.FC<QueueHeaderProps> = ({
 }) => {
   const formattedTime = lastUpdated
     ? lastUpdated.toLocaleTimeString('vi-VN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
     : null;
 
   return (
@@ -48,7 +48,7 @@ export const QueueHeader: React.FC<QueueHeaderProps> = ({
             Đơn hàng
           </h2>
           <p className="text-[11px] text-[#727B77] mt-0.5">
-            Quy trình chế biến công bằng (FIFO)
+            Chế biến món theo thứ tự
           </p>
         </div>
 
@@ -72,6 +72,14 @@ export const QueueHeader: React.FC<QueueHeaderProps> = ({
           >
             Sẵn sàng: <strong>{counts.ready}</strong>
           </span>
+          {counts.paymentException > 0 && (
+            <span
+              className="px-2.5 py-1 rounded-lg bg-[#FEF3F2] text-[#D92D20] border border-[#FECDCA]"
+              title="Đơn thanh toán ngoại lệ cần đối soát"
+            >
+              Cần đối soát: <strong>{counts.paymentException}</strong>
+            </span>
+          )}
         </div>
       </div>
 

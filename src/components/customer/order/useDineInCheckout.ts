@@ -254,12 +254,20 @@ export function useDineInCheckout({
               message: 'Quán đang tạm ngưng nhận đơn đặt món mới. Quý khách vui lòng liên hệ nhân viên.',
               canRetrySameKey: false,
             });
+          } else if (code === 'PAYMENT_PROVIDER_UNAVAILABLE' || statusHttp === 503) {
+            clearPendingIntentFromStorage(qrCode);
+            setStatus('error');
+            setError({
+              code,
+              message: 'Cổng thanh toán mang đi của quán đang bảo trì hoặc chưa sẵn sàng. Quý khách vui lòng gọi món trực tiếp tại quầy thu ngân.',
+              canRetrySameKey: false,
+            });
           } else if (code === 'INVALID_STATE_TRANSITION') {
             clearPendingIntentFromStorage(qrCode);
             setStatus('error');
             setError({
               code,
-              message: 'Đơn mang đi hiện chưa hỗ trợ đặt trực tiếp (sẽ mở ở Phase 4). Quý khách vui lòng gọi tại quầy thu ngân.',
+              message: 'Trạng thái đơn không hợp lệ để xử lý tiếp. Quý khách vui lòng kiểm tra lại giỏ hàng hoặc liên hệ thu ngân.',
               canRetrySameKey: false,
             });
           } else if (
@@ -358,17 +366,8 @@ export function useDineInCheckout({
       return retryUncertainOrder();
     }
 
-    if (isTakeaway) {
-      setStatus('error');
-      setError({
-        message:
-          'Đơn mang đi sẽ thanh toán trước khi quán chế biến (Chức năng này sẽ mở ở Phase 4).',
-        canRetrySameKey: false,
-      });
-      return;
-    }
-
-    if (!isTableVerified) {
+    // Cho phép gửi đơn mang đi ở Phase 4 mà không yêu cầu xác thực bàn
+    if (!isTakeaway && !isTableVerified) {
       setStatus('error');
       setError({
         message: 'Cần xác thực mã phiên bàn trước khi đặt món.',

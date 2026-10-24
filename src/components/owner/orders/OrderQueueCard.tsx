@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { Clock, MapPin, ShoppingBag } from 'lucide-react';
+import { Clock, MapPin, ShoppingBag, AlertTriangle } from 'lucide-react';
 import type { OrderSummary, OrderDetail } from '../../../../docs/contracts/types';
 import { OwnerStatusBadge } from '../OwnerStatusBadge';
+import { isPaymentReviewRequired } from '@/lib/validations/orders';
 
 export interface OrderQueueCardProps {
   order: OrderSummary | OrderDetail;
@@ -53,6 +54,7 @@ export const OrderQueueCard: React.FC<OrderQueueCardProps> = ({
   className = '',
 }) => {
   const isDineIn = order.type === 'dine_in';
+  const isHeld = isPaymentReviewRequired(order);
   const formattedTotal = new Intl.NumberFormat('vi-VN').format(order.totalVnd) + ' đ';
 
   // Hiển thị ticketNo nếu có, nếu null hiển thị 6 ký tự ID
@@ -108,8 +110,16 @@ export const OrderQueueCard: React.FC<OrderQueueCardProps> = ({
           )}
         </div>
 
-        {/* Trạng thái đơn từ API */}
-        <OwnerStatusBadge status={order.status} />
+        {/* Trạng thái đơn từ API hoặc cảnh báo cần đối soát nếu held */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {isHeld && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-[#FEF3F2] text-[#D92D20] border border-[#FECDCA]">
+              <AlertTriangle className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
+              <span>Cần đối soát</span>
+            </span>
+          )}
+          <OwnerStatusBadge status={order.status} />
+        </div>
       </div>
 
       {/* Hàng 2: Tóm tắt món ăn (nếu có lines) hoặc số lượng món */}

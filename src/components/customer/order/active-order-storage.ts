@@ -173,6 +173,20 @@ export const getOrderStatusBadgeConfig = (
         isCompleted: false,
         isCancelled: true,
       };
+    case 'pending_payment':
+      return {
+        label: canonicalLabel, // 'Chờ thanh toán'
+        badgeClass: 'bg-[#F0F9FF] text-[#026AA2] border-[#B9E6FE]',
+        isCompleted: false,
+        isCancelled: false,
+      };
+    case 'payment_exception':
+      return {
+        label: canonicalLabel, // 'Cần đối soát thanh toán'
+        badgeClass: 'bg-[#FFFAEB] text-[#B54708] border-[#FEDF89]',
+        isCompleted: false,
+        isCancelled: false,
+      };
     case 'accepted':
     default:
       return {
@@ -201,6 +215,10 @@ export const getOrderStatusSubtitle = (
       return `${prefix}${count} phần món · Món đã sẵn sàng`;
     case 'preparing':
       return `${prefix}${count} phần món · Bếp đang chế biến`;
+    case 'pending_payment':
+      return `${prefix}${count} phần món · Chờ thanh toán VietQR`;
+    case 'payment_exception':
+      return `${prefix}Cần đối soát thanh toán tại quầy`;
     case 'cancelled':
       return `${prefix}Đơn hàng đã được quán hủy`;
     case 'accepted':

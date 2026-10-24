@@ -16,11 +16,12 @@ it("requires safe positive versions and discriminate complete body without dine-
   expect(completeOrderInput.safeParse({ ...cmd, type: "dine_in" }).success).toBe(true);
   expect(completeOrderInput.safeParse({ ...cmd, type: "dine_in", pickupCode: "secret" }).success).toBe(false);
   expect(completeOrderInput.safeParse({ ...cmd, type: "takeaway" }).success).toBe(false);
-  expect(completeOrderInput.safeParse({ ...cmd, type: "takeaway", pickupCode: "valid-shape-only" }).success).toBe(true);
+  expect(completeOrderInput.safeParse({ ...cmd, type: "takeaway", pickupCode: "000042" }).success).toBe(true);
 });
 it("enforces bounded filters, view/status pairings and rejects literal all", () => {
   expect(ownerOrdersQuery.parse({})).toEqual({ view: "queue", limit: 50 });
-  for (const value of [{ type: "all" }, { status: "all" }, { status: "completed" }, { view: "history", status: "accepted" }, { view: "exceptions", status: "ready" }, { limit: "101" }, { limit: "0" }, { limit: "1.5" }, { limit: "01" }, { storeId: randomUUID() }, { orderId: "bad" }, { cursor: "a".repeat(2049) }])
+  for (const value of [{ type: "all" }, { status: "all" }, { status: "completed" }, { view: "history", status: "accepted" }, { view: "exceptions", status: "cancelled" }, { limit: "101" }, { limit: "0" }, { limit: "1.5" }, { limit: "01" }, { storeId: randomUUID() }, { orderId: "bad" }, { cursor: "a".repeat(2049) }])
     expect(ownerOrdersQuery.safeParse(value).success).toBe(false);
   expect(ownerOrdersQuery.safeParse({ view: "history", status: "completed", type: "takeaway", limit: "100" }).success).toBe(true);
+  expect(ownerOrdersQuery.safeParse({ view: "exceptions", status: "ready" }).success).toBe(true); // review-held lifecycle state
 });

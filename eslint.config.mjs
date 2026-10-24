@@ -6,5 +6,5 @@ export default defineConfig([
   ...nextVitals,
   ...nextTypeScript,
   // Frozen contracts are reviewed separately; application source stays fully checked.
-  globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts", "docs/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts", "docs/**", ".tmp*"]),
 ]);

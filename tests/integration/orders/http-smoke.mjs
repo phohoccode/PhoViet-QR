@@ -106,7 +106,7 @@ try {
   await fail("/api/public/orders", guest, "POST", input, 403, "FORBIDDEN", { origin: "https://attacker.invalid" });
   await fail("/api/public/orders", guest, "POST", "x".repeat(65537), 400, "VALIDATION_ERROR");
   await fail(`/api/public/orders/${order.id}?includePickup=1`, guest, "GET", undefined, 400, "VALIDATION_ERROR");
-  await fail("/api/public/orders", guest, "POST", { ...input, clientRequestId: randomUUID(), qrCode: counter.publicCode }, 409, "INVALID_STATE_TRANSITION");
+  await fail("/api/public/orders", guest, "POST", { ...input, clientRequestId: randomUUID(), qrCode: counter.publicCode }, 503, "PAYMENT_PROVIDER_UNAVAILABLE");
   await fail("/api/public/orders", guest, "POST", { ...input, clientRequestId: randomUUID(), menuRevision: "stale" }, 409, "PRICE_CHANGED");
   await fail("/api/public/orders", guest, "POST", { ...input, clientRequestId: randomUUID(), items: [{ ...input.items[0], optionIds: [randomUUID()] }] }, 422, "VALIDATION_ERROR");
   // A body >4KiB remains supported by R04's dedicated bounded reader.
@@ -154,7 +154,7 @@ try {
   await fail(`/api/owner/orders/${order.id}/ready`, owner, "POST", key(), 400, "VALIDATION_ERROR");
   await fail("/api/owner/orders/bad/ready", owner, "POST", { ...key(), expectedVersion: 1 }, 400, "VALIDATION_ERROR");
   await fail(`/api/owner/orders/${randomUUID()}/ready`, owner, "POST", { ...key(), expectedVersion: 1 }, 404, "ORDER_NOT_FOUND");
-  await fail(`/api/owner/orders/${order.id}/complete`, owner, "POST", { ...key(), expectedVersion: 1, type: "takeaway", pickupCode: "opaque-private-proof" }, 409, "INVALID_STATE_TRANSITION");
+  await fail(`/api/owner/orders/${order.id}/complete`, owner, "POST", { ...key(), expectedVersion: 1, type: "takeaway", pickupCode: "opaque-private-proof" }, 400, "VALIDATION_ERROR");
   secrets.push("opaque-private-proof");
   const claimKey = key();
   const claims = await Promise.all(Array.from({ length: 12 }, () => ok("/api/owner/queue/claim-next", owner, "POST", claimKey)));
